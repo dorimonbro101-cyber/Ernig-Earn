@@ -287,6 +287,7 @@ export default function App() {
   };
 
   // --- Render Helpers ---
+  // --- Render Helpers ---
   if (loading) {
     return (
       <div className="min-h-screen bg-primary flex items-center justify-center">
@@ -298,7 +299,7 @@ export default function App() {
     );
   }
 
-  if (view === 'admin') {
+  if (view === 'admin' && currentUser?.isAdmin) {
     return (
       <AdminPanel 
         users={users} 
@@ -334,6 +335,17 @@ export default function App() {
         <Header onAdminClick={() => setShowAdminLogin(true)} />
         <AuthScreen mode={authMode} setMode={setAuthMode} onLogin={handleLogin} onRegister={handleRegister} />
         {showAdminLogin && <AdminLoginModal password={adminPassword} setPassword={setAdminPassword} onSubmit={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-primary flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCcw className="text-highlight animate-spin" size={48} />
+          <p className="text-slate-400 font-bold tracking-widest">AUTHENTICATING...</p>
+        </div>
       </div>
     );
   }
@@ -1780,6 +1792,7 @@ function AdminPanel({
   impersonateUser 
 }: any) {
   const [adminTab, setAdminTab] = useState('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const updateSettings = (newSettings: AppSettings) => {
     set(ref(db, 'settings'), newSettings);
@@ -1833,9 +1846,31 @@ function AdminPanel({
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-primary text-slate-200">
+      {/* Mobile Admin Header */}
+      <div className="md:hidden bg-secondary border-b border-white/5 p-4 flex justify-between items-center sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-highlight rounded-xl flex items-center justify-center text-white shadow-lg shadow-highlight/20">
+            <ShieldCheck size={24} />
+          </div>
+          <h1 className="text-lg font-bold text-white tracking-tight">Admin</h1>
+        </div>
+        <button 
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-2 text-slate-400 hover:text-white transition-colors"
+        >
+          {isSidebarOpen ? <X size={28} /> : <Menu size={28} />}
+        </button>
+      </div>
+
       {/* Admin Sidebar */}
-      <aside className="w-full md:w-72 bg-secondary border-r border-white/5 flex flex-col sticky top-0 md:h-screen z-40 shadow-2xl">
-        <div className="p-8 flex items-center gap-4 border-b border-white/5">
+      <aside className={`
+        fixed inset-0 z-40 md:relative md:inset-auto
+        w-full md:w-72 bg-secondary border-r border-white/5 
+        flex flex-col transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        md:h-screen shadow-2xl
+      `}>
+        <div className="p-8 hidden md:flex items-center gap-4 border-b border-white/5">
           <div className="w-12 h-12 bg-highlight rounded-2xl flex items-center justify-center text-white shadow-lg shadow-highlight/20">
             <ShieldCheck size={28} />
           </div>
@@ -1845,15 +1880,15 @@ function AdminPanel({
           </div>
         </div>
 
-        <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar">
-          <AdminNavItem active={adminTab === 'dashboard'} onClick={() => setAdminTab('dashboard')} icon={<LayoutDashboard size={22} />} label="Dashboard" />
-          <AdminNavItem active={adminTab === 'users'} onClick={() => setAdminTab('users')} icon={<Users size={22} />} label="Users" />
-          <AdminNavItem active={adminTab === 'tasks'} onClick={() => setAdminTab('tasks')} icon={<ClipboardList size={22} />} label="Tasks" />
-          <AdminNavItem active={adminTab === 'plans'} onClick={() => setAdminTab('plans')} icon={<Award size={22} />} label="Plans" />
-          <AdminNavItem active={adminTab === 'deposits'} onClick={() => setAdminTab('deposits')} icon={<ArrowDownCircle size={22} />} label="Deposits" badge={stats.pendingDeposits} />
-          <AdminNavItem active={adminTab === 'withdrawals'} onClick={() => setAdminTab('withdrawals')} icon={<ArrowUpCircle size={22} />} label="Withdrawals" badge={stats.pendingWithdrawals} />
-          <AdminNavItem active={adminTab === 'support'} onClick={() => setAdminTab('support')} icon={<MessageSquare size={22} />} label="Support" badge={stats.openTickets} />
-          <AdminNavItem active={adminTab === 'settings'} onClick={() => setAdminTab('settings')} icon={<Settings size={22} />} label="Settings" />
+        <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar pt-20 md:pt-6">
+          <AdminNavItem active={adminTab === 'dashboard'} onClick={() => { setAdminTab('dashboard'); setIsSidebarOpen(false); }} icon={<LayoutDashboard size={22} />} label="Dashboard" />
+          <AdminNavItem active={adminTab === 'users'} onClick={() => { setAdminTab('users'); setIsSidebarOpen(false); }} icon={<Users size={22} />} label="Users" />
+          <AdminNavItem active={adminTab === 'tasks'} onClick={() => { setAdminTab('tasks'); setIsSidebarOpen(false); }} icon={<ClipboardList size={22} />} label="Tasks" />
+          <AdminNavItem active={adminTab === 'plans'} onClick={() => { setAdminTab('plans'); setIsSidebarOpen(false); }} icon={<Award size={22} />} label="Plans" />
+          <AdminNavItem active={adminTab === 'deposits'} onClick={() => { setAdminTab('deposits'); setIsSidebarOpen(false); }} icon={<ArrowDownCircle size={22} />} label="Deposits" badge={stats.pendingDeposits} />
+          <AdminNavItem active={adminTab === 'withdrawals'} onClick={() => { setAdminTab('withdrawals'); setIsSidebarOpen(false); }} icon={<ArrowUpCircle size={22} />} label="Withdrawals" badge={stats.pendingWithdrawals} />
+          <AdminNavItem active={adminTab === 'support'} onClick={() => { setAdminTab('support'); setIsSidebarOpen(false); }} icon={<MessageSquare size={22} />} label="Support" badge={stats.openTickets} />
+          <AdminNavItem active={adminTab === 'settings'} onClick={() => { setAdminTab('settings'); setIsSidebarOpen(false); }} icon={<Settings size={22} />} label="Settings" />
         </nav>
 
         <div className="p-6 border-t border-white/5">
@@ -1869,7 +1904,7 @@ function AdminPanel({
 
       {/* Admin Content */}
       <main className="flex-1 overflow-y-auto h-screen custom-scrollbar">
-        <header className="sticky top-0 z-30 bg-primary/80 backdrop-blur-xl border-b border-white/5 p-6 md:px-10 flex justify-between items-center">
+        <header className="hidden md:flex sticky top-0 z-30 bg-primary/80 backdrop-blur-xl border-b border-white/5 p-6 md:px-10 justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold text-white capitalize tracking-tight">{adminTab}</h2>
             <p className="text-xs text-slate-500 font-medium mt-0.5">Manage your platform operations</p>
@@ -1883,7 +1918,7 @@ function AdminPanel({
           </div>
         </header>
 
-        <div className="p-6 md:p-10 max-w-7xl mx-auto">
+        <div className="p-4 md:p-10 max-w-7xl mx-auto">
           <AnimatePresence mode="wait">
             <motion.div
               key={adminTab}
@@ -1892,6 +1927,10 @@ function AdminPanel({
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
+              <div className="md:hidden mb-6">
+                <h2 className="text-2xl font-bold text-white capitalize tracking-tight">{adminTab}</h2>
+                <div className="h-1 w-12 bg-highlight rounded-full mt-2"></div>
+              </div>
               {renderAdminTab()}
             </motion.div>
           </AnimatePresence>
