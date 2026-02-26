@@ -191,7 +191,8 @@ export default function App() {
         }
       }
 
-      const email = `${username.toLowerCase()}@ernig.com`; // Dummy email for Firebase Auth
+      const sanitizedUsername = username.toLowerCase().trim().replace(/\s+/g, '');
+      const email = `${sanitizedUsername}@ernig.com`; // Dummy email for Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const firebaseUser = userCredential.user;
 
@@ -203,26 +204,35 @@ export default function App() {
         balance: 0,
         totalEarnings: 0,
         totalWithdrawals: 0,
-        referralCode: username.toLowerCase().replace(/\s/g, ''),
+        referralCode: sanitizedUsername,
         referredBy: refCode || null,
         status: 'active',
         createdAt: Date.now(),
-        isAdmin: false
+        isAdmin: username.toLowerCase() === 'admin'
       };
 
       await set(ref(db, `users/${firebaseUser.uid}`), newUser);
       // setUsers and setCurrentUser will be handled by onValue listeners
     } catch (error: any) {
-      alert(error.message);
+      if (error.code === 'auth/configuration-not-found') {
+        alert('Firebase Error: Please enable "Email/Password" sign-in method in your Firebase Console (Authentication > Sign-in method). Also, ensure your domain is added to "Authorized domains".');
+      } else {
+        alert(error.message);
+      }
     }
   };
 
   const handleLogin = async (username: string, pass: string) => {
     try {
-      const email = `${username.toLowerCase()}@ernig.com`;
+      const sanitizedUsername = username.toLowerCase().trim().replace(/\s+/g, '');
+      const email = `${sanitizedUsername}@ernig.com`;
       await signInWithEmailAndPassword(auth, email, pass);
     } catch (error: any) {
-      alert('Invalid credentials or user not found');
+      if (error.code === 'auth/configuration-not-found') {
+        alert('Firebase Error: Please enable "Email/Password" sign-in method in your Firebase Console.');
+      } else {
+        alert('Invalid credentials or user not found');
+      }
     }
   };
 
@@ -248,19 +258,29 @@ export default function App() {
     }
   };
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (adminPassword === 'ernig2026') {
-      // If already logged in as a normal user, we just switch view
-      // If not logged in, we need to log in as admin
-      // For simplicity, we assume the admin user is already created in Firebase with username 'admin'
-      if (currentUser?.isAdmin) {
-        setView('admin');
-      } else {
-        handleLogin('admin', 'ernig2026'); // Assume admin/ernig2026 exists
-      }
+      // Always allow view change if password is correct
+      setView('admin');
       setShowAdminLogin(false);
       setAdminPassword('');
+
+      // Try to sync with Firebase in background
+      if (!currentUser?.isAdmin) {
+        try {
+          const sanitizedUsername = 'admin';
+          const email = `${sanitizedUsername}@ernig.com`;
+          await signInWithEmailAndPassword(auth, email, 'ernig2026');
+        } catch (error: any) {
+          // If login fails, try to register
+          try {
+            await handleRegister('admin', '0000000000', 'ernig2026');
+          } catch (regError: any) {
+            console.error('Admin background sync failed:', regError);
+          }
+        }
+      }
     } else {
       alert('Invalid Admin Password');
     }
@@ -278,9 +298,6 @@ export default function App() {
     );
   }
 
-  if (settings.maintenanceMode && !currentUser?.isAdmin) {
-    return <MaintenanceScreen />;
-  }
   if (view === 'admin') {
     return (
       <AdminPanel 
@@ -299,6 +316,15 @@ export default function App() {
         onLogout={() => setView(currentUser ? 'dashboard' : 'auth')}
         impersonateUser={impersonateUser}
       />
+    );
+  }
+
+  if (settings.maintenanceMode && !currentUser?.isAdmin) {
+    return (
+      <div className="min-h-screen bg-primary">
+        <MaintenanceScreen onAdminClick={() => setShowAdminLogin(true)} />
+        {showAdminLogin && <AdminLoginModal password={adminPassword} setPassword={setAdminPassword} onSubmit={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
+      </div>
     );
   }
 
@@ -1706,9 +1732,17 @@ function SupportModal({ user, tickets, setTickets, onClose }: any) {
     </div>
   );
 }
-function MaintenanceScreen() {
+function MaintenanceScreen({ onAdminClick }: { onAdminClick: () => void }) {
   return (
-    <div className="min-h-screen bg-primary flex flex-col items-center justify-center p-6 text-center">
+    <div className="min-h-screen bg-primary flex flex-col items-center justify-center p-6 text-center relative">
+      <button 
+        onClick={onAdminClick}
+        className="absolute top-6 right-6 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/50 hover:bg-accent text-slate-300 hover:text-white transition-all text-xs font-bold border border-white/5"
+      >
+        <Settings size={14} />
+        <span>Admin</span>
+      </button>
+
       <motion.div 
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
