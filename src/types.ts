@@ -53,6 +53,7 @@ export interface Task {
   link: string;
   category: string;
   active: boolean;
+  imageUrl?: string;
 }
 
 export interface SupportTicket {
@@ -82,4 +83,5 @@ export interface AppSettings {
   referralLevels: number;
   referralBonuses: { level: number; amount: number; type: 'percentage' | 'fixed' }[];
   themeColor: string;
+  maintenanceMode: boolean;
 }

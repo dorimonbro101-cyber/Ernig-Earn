@@ -24,7 +24,9 @@ import {
   EyeOff,
   Bell,
   Home,
-  Award
+  Award,
+  AlertTriangle,
+  RefreshCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -35,6 +37,14 @@ import {
   AppSettings, 
   Plan
 } from './types';
+import { db, auth } from './firebase';
+import { ref, onValue, set, push, update, get } from 'firebase/database';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  onAuthStateChanged, 
+  signOut 
+} from 'firebase/auth';
 
 // Initial Settings
 const DEFAULT_SETTINGS: AppSettings = {
@@ -50,7 +60,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     { level: 2, amount: 5, type: 'percentage' },
     { level: 3, amount: 2, type: 'percentage' }
   ],
-  themeColor: '#4F46E5' // Indigo 600
+  themeColor: '#4F46E5', // Indigo 600
+  maintenanceMode: false
 };
 
 // Initial Plans
@@ -63,49 +74,21 @@ const INITIAL_PLANS: Plan[] = [
 
 // Initial Tasks
 const INITIAL_TASKS: Task[] = [
-  { id: '1', title: 'Watch Video Ad 1', description: 'Watch a 30-second video to earn.', amount: 5, timeRequired: 30, link: '#', category: 'Video', active: true },
-  { id: '2', title: 'Watch Video Ad 2', description: 'Watch a 30-second video to earn.', amount: 5, timeRequired: 30, link: '#', category: 'Video', active: true },
-  { id: '3', title: 'Watch Video Ad 3', description: 'Watch a 30-second video to earn.', amount: 5, timeRequired: 30, link: '#', category: 'Video', active: true },
+  { id: '1', title: 'Watch Video Ad 1', description: 'Watch a 30-second video to earn.', amount: 5, timeRequired: 30, link: '#', category: 'Video', active: true, imageUrl: 'https://picsum.photos/seed/task1/400/200' },
+  { id: '2', title: 'Watch Video Ad 2', description: 'Watch a 30-second video to earn.', amount: 5, timeRequired: 30, link: '#', category: 'Video', active: true, imageUrl: 'https://picsum.photos/seed/task2/400/200' },
+  { id: '3', title: 'Watch Video Ad 3', description: 'Watch a 30-second video to earn.', amount: 5, timeRequired: 30, link: '#', category: 'Video', active: true, imageUrl: 'https://picsum.photos/seed/task3/400/200' },
 ];
 
 export default function App() {
   // --- State ---
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('ernig_users');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('ernig_current_user');
-    return saved ? JSON.parse(saved) : null;
-  });
-
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [impersonator, setImpersonator] = useState<User | null>(null);
-
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem('ernig_tasks');
-    return saved ? JSON.parse(saved) : INITIAL_TASKS;
-  });
-
-  const [plans, setPlans] = useState<Plan[]>(() => {
-    const saved = localStorage.getItem('ernig_plans');
-    return saved ? JSON.parse(saved) : INITIAL_PLANS;
-  });
-
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('ernig_transactions');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [tickets, setTickets] = useState<SupportTicket[]>(() => {
-    const saved = localStorage.getItem('ernig_tickets');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    const saved = localStorage.getItem('ernig_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-  });
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   const [view, setView] = useState<'auth' | 'dashboard' | 'admin'>('auth');
   const [activeTab, setActiveTab] = useState('home');
@@ -113,80 +96,144 @@ export default function App() {
   const [theme, setTheme] = useState(settings.themeColor);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  // --- Persistence ---
+  // --- Firebase Sync ---
   useEffect(() => {
-    localStorage.setItem('ernig_users', JSON.stringify(users));
-    localStorage.setItem('ernig_current_user', JSON.stringify(currentUser));
-    localStorage.setItem('ernig_tasks', JSON.stringify(tasks));
-    localStorage.setItem('ernig_plans', JSON.stringify(plans));
-    localStorage.setItem('ernig_transactions', JSON.stringify(transactions));
-    localStorage.setItem('ernig_tickets', JSON.stringify(tickets));
-    localStorage.setItem('ernig_settings', JSON.stringify(settings));
-  }, [users, currentUser, tasks, plans, transactions, tickets, settings]);
+    const unsubSettings = onValue(ref(db, 'settings'), (snapshot) => {
+      if (snapshot.exists()) setSettings(snapshot.val());
+      else set(ref(db, 'settings'), DEFAULT_SETTINGS);
+    });
 
-  useEffect(() => {
-    if (currentUser) {
-      setView(currentUser.isAdmin ? 'admin' : 'dashboard');
-      // Sync currentUser with users list
-      const updatedUser = users.find(u => u.id === currentUser.id);
-      if (updatedUser && JSON.stringify(updatedUser) !== JSON.stringify(currentUser)) {
-        setCurrentUser(updatedUser);
+    const unsubUsers = onValue(ref(db, 'users'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        setUsers(Object.values(data));
       }
-    } else {
-      setView('auth');
-    }
-  }, [currentUser, users]);
+    });
+
+    const unsubTasks = onValue(ref(db, 'tasks'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        setTasks(Object.values(data));
+      } else {
+        INITIAL_TASKS.forEach(t => set(ref(db, `tasks/${t.id}`), t));
+      }
+    });
+
+    const unsubPlans = onValue(ref(db, 'plans'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        setPlans(Object.values(data));
+      } else {
+        INITIAL_PLANS.forEach(p => set(ref(db, `plans/${p.id}`), p));
+      }
+    });
+
+    const unsubTransactions = onValue(ref(db, 'transactions'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        setTransactions(Object.values(data));
+      }
+    });
+
+    const unsubTickets = onValue(ref(db, 'tickets'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        setTickets(Object.values(data));
+      }
+    });
+
+    const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        onValue(ref(db, `users/${firebaseUser.uid}`), (snapshot) => {
+          if (snapshot.exists()) {
+            const userData = snapshot.val();
+            setCurrentUser(userData);
+            if (!impersonator) {
+              setView(userData.isAdmin ? 'admin' : 'dashboard');
+            }
+          }
+          setLoading(false);
+        });
+      } else {
+        setCurrentUser(null);
+        setView('auth');
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      unsubSettings();
+      unsubUsers();
+      unsubTasks();
+      unsubPlans();
+      unsubTransactions();
+      unsubTickets();
+      unsubAuth();
+    };
+  }, [impersonator]);
 
   useEffect(() => {
     setTheme(settings.themeColor);
   }, [settings.themeColor]);
 
   // --- Auth Handlers ---
-  const handleRegister = (username: string, phone: string, pass: string, refCode?: string) => {
-    if (users.find(u => u.username === username || u.phone === phone)) {
-      alert('Username or phone already exists');
-      return;
-    }
-
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      username,
-      phone,
-      password: pass,
-      balance: 0,
-      totalEarnings: 0,
-      totalWithdrawals: 0,
-      referralCode: username.toLowerCase().replace(/\s/g, ''),
-      referredBy: refCode,
-      status: 'active',
-      createdAt: Date.now(),
-      isAdmin: username === 'admin' // Simple admin check for demo
-    };
-
-    setUsers([...users, newUser]);
-    setCurrentUser(newUser);
-  };
-
-  const handleLogin = (username: string, pass: string) => {
-    const user = users.find(u => u.username === username && u.password === pass);
-    if (user) {
-      if (user.status === 'banned') {
-        alert('Your account has been banned.');
-        return;
+  const handleRegister = async (username: string, phone: string, pass: string, refCode?: string) => {
+    try {
+      // Check if username exists in DB
+      const usernameSnapshot = await get(ref(db, 'users'));
+      if (usernameSnapshot.exists()) {
+        const allUsers = Object.values(usernameSnapshot.val()) as User[];
+        if (allUsers.find(u => u.username === username)) {
+          alert('Username already exists');
+          return;
+        }
       }
-      setCurrentUser(user);
-    } else {
-      alert('Invalid credentials');
+
+      const email = `${username.toLowerCase()}@ernig.com`; // Dummy email for Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const firebaseUser = userCredential.user;
+
+      const newUser: User = {
+        id: firebaseUser.uid,
+        username,
+        phone,
+        password: pass,
+        balance: 0,
+        totalEarnings: 0,
+        totalWithdrawals: 0,
+        referralCode: username.toLowerCase().replace(/\s/g, ''),
+        referredBy: refCode || null,
+        status: 'active',
+        createdAt: Date.now(),
+        isAdmin: false
+      };
+
+      await set(ref(db, `users/${firebaseUser.uid}`), newUser);
+      // setUsers and setCurrentUser will be handled by onValue listeners
+    } catch (error: any) {
+      alert(error.message);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogin = async (username: string, pass: string) => {
+    try {
+      const email = `${username.toLowerCase()}@ernig.com`;
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (error: any) {
+      alert('Invalid credentials or user not found');
+    }
+  };
+
+  const handleLogout = async () => {
     if (impersonator) {
       setCurrentUser(impersonator);
       setImpersonator(null);
+      setView('admin');
     } else {
-      setCurrentUser(null);
+      await signOut(auth);
+      setView('auth');
     }
     setActiveTab('home');
   };
@@ -204,7 +251,14 @@ export default function App() {
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (adminPassword === 'ernig2026') {
-      setView('admin');
+      // If already logged in as a normal user, we just switch view
+      // If not logged in, we need to log in as admin
+      // For simplicity, we assume the admin user is already created in Firebase with username 'admin'
+      if (currentUser?.isAdmin) {
+        setView('admin');
+      } else {
+        handleLogin('admin', 'ernig2026'); // Assume admin/ernig2026 exists
+      }
       setShowAdminLogin(false);
       setAdminPassword('');
     } else {
@@ -213,6 +267,20 @@ export default function App() {
   };
 
   // --- Render Helpers ---
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-primary flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCcw className="text-highlight animate-spin" size={48} />
+          <p className="text-slate-400 font-bold tracking-widest animate-pulse">LOADING ERNIG EARN...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (settings.maintenanceMode && !currentUser?.isAdmin) {
+    return <MaintenanceScreen />;
+  }
   if (view === 'admin') {
     return (
       <AdminPanel 
@@ -349,18 +417,26 @@ function Header({ onAdminClick, user }: { onAdminClick: () => void, user?: User 
       </div>
       
       <div className="flex items-center gap-4">
-        <button 
-          onClick={onAdminClick}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/50 hover:bg-accent text-slate-300 hover:text-white transition-all text-xs font-bold border border-white/5"
-        >
-          <Settings size={14} />
-          <span>Admin</span>
-        </button>
+        {!user?.isAdmin && (
+          <button 
+            onClick={onAdminClick}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/50 hover:bg-accent text-slate-300 hover:text-white transition-all text-xs font-bold border border-white/5"
+          >
+            <Settings size={14} />
+            <span>Admin</span>
+          </button>
+        )}
         
         {user && (
-          <div className="w-10 h-10 rounded-full border-2 border-highlight p-0.5">
-            <div className="w-full h-full bg-accent rounded-full flex items-center justify-center text-white font-bold text-sm">
-              {user.username[0].toUpperCase()}
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-xs font-bold text-white">{user.username}</p>
+              <p className="text-[10px] text-emerald-400 font-bold">৳{user.balance.toFixed(2)}</p>
+            </div>
+            <div className="w-10 h-10 rounded-full border-2 border-highlight p-0.5">
+              <div className="w-full h-full bg-accent rounded-full flex items-center justify-center text-white font-bold text-sm">
+                {user.username[0].toUpperCase()}
+              </div>
             </div>
           </div>
         )}
@@ -592,7 +668,7 @@ function UserDashboard({
 
   const renderTab = () => {
     switch (activeTab) {
-      case 'home': return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} />;
+      case 'home': return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} setActiveTab={setActiveTab} />;
       case 'tasks': return <TasksTab user={user} setUsers={setUsers} tasks={tasks} transactions={transactions} setTransactions={setTransactions} settings={settings} plans={plans} />;
       case 'plans': return <PlansTab user={user} setUsers={setUsers} plans={plans} transactions={transactions} setTransactions={setTransactions} settings={settings} />;
       case 'history': return <HistoryTab user={user} transactions={transactions} settings={settings} />;
@@ -622,11 +698,40 @@ function UserDashboard({
       {/* Modals */}
       {showDeposit && <DepositModal user={user} settings={settings} onClose={() => setShowDeposit(false)} onSubmit={(t: any) => setTransactions([...transactions, t])} />}
       {showWithdraw && <WithdrawModal user={user} settings={settings} onClose={() => setShowWithdraw(false)} onSubmit={(t: any) => setTransactions([...transactions, t])} />}
+
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-secondary/90 backdrop-blur-xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
+        <NavItem active={activeTab === 'home'} onClick={() => setActiveTab('home')} icon={<Home size={22} />} label="হোম" />
+        <NavItem active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<ClipboardList size={22} />} label="কাজ" />
+        <NavItem active={activeTab === 'plans'} onClick={() => setActiveTab('plans')} icon={<Award size={22} />} label="প্ল্যান" />
+        <NavItem active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={22} />} label="হিস্ট্রি" />
+        <NavItem active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={<UserIcon size={22} />} label="প্রোফাইল" />
+      </nav>
     </div>
   );
 }
 
-function HomeTab({ user, stats, onDeposit, onWithdraw, settings }: any) {
+function NavItem({ active, onClick, icon, label }: any) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1.5 transition-all duration-300 relative ${active ? 'text-highlight' : 'text-slate-500 hover:text-slate-300'}`}
+    >
+      <div className={`transition-transform duration-300 ${active ? 'scale-110 -translate-y-1' : ''}`}>
+        {icon}
+      </div>
+      <span className={`text-[10px] font-bold uppercase tracking-widest font-bangla ${active ? 'opacity-100' : 'opacity-60'}`}>{label}</span>
+      {active && (
+        <motion.div 
+          layoutId="nav-indicator"
+          className="absolute -top-4 w-1 h-1 bg-highlight rounded-full shadow-[0_0_10px_#E94560]"
+        />
+      )}
+    </button>
+  );
+}
+
+function HomeTab({ user, stats, onDeposit, onWithdraw, settings, setActiveTab }: any) {
   const [showBalance, setShowBalance] = useState(true);
 
   return (
@@ -705,10 +810,10 @@ function HomeTab({ user, stats, onDeposit, onWithdraw, settings }: any) {
           দ্রুত কার্যক্রম
         </h3>
         <div className="grid grid-cols-4 gap-4 text-center">
-          <QuickAction icon={<ClipboardList className="text-amber-400" />} label="কাজ" color="bg-amber-400/10" />
-          <QuickAction icon={<Plus className="text-highlight" />} label="ডিপোজিট" color="bg-highlight/10" />
-          <QuickAction icon={<Wallet className="text-emerald-400" />} label="উত্তোলন" color="bg-emerald-400/10" />
-          <QuickAction icon={<Award className="text-violet-400" />} label="প্ল্যান" color="bg-violet-400/10" />
+          <QuickAction icon={<ClipboardList className="text-amber-400" />} label="কাজ" color="bg-amber-400/10" onClick={() => setActiveTab('tasks')} />
+          <QuickAction icon={<Plus className="text-highlight" />} label="ডিপোজিট" color="bg-highlight/10" onClick={onDeposit} />
+          <QuickAction icon={<Wallet className="text-emerald-400" />} label="উত্তোলন" color="bg-emerald-400/10" onClick={onWithdraw} />
+          <QuickAction icon={<Award className="text-violet-400" />} label="প্ল্যান" color="bg-violet-400/10" onClick={() => setActiveTab('plans')} />
         </div>
       </div>
 
@@ -727,9 +832,9 @@ function HomeTab({ user, stats, onDeposit, onWithdraw, settings }: any) {
   );
 }
 
-function QuickAction({ icon, label, color }: any) {
+function QuickAction({ icon, label, color, onClick }: any) {
   return (
-    <button className="flex flex-col items-center gap-3 group">
+    <button onClick={onClick} className="flex flex-col items-center gap-3 group">
       <div className={`w-16 h-16 ${color} rounded-2xl flex items-center justify-center shadow-lg border border-white/5 group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300`}>
         {React.cloneElement(icon, { size: 28 })}
       </div>
@@ -875,28 +980,31 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
       
       <div className="space-y-4">
         {tasks.filter((t: any) => t.active).map((task: any) => (
-          <div key={task.id} className="glass-card p-5 flex items-center justify-between group hover:border-highlight/30 transition-all duration-300">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-accent rounded-2xl flex items-center justify-center text-highlight shadow-lg group-hover:scale-110 transition-transform">
-                <ClipboardList size={28} />
-              </div>
-              <div>
-                <h4 className="font-bold text-white text-lg font-bangla">{task.title}</h4>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="text-xs font-bold text-emerald-400">৳{task.amount.toFixed(2)}</span>
-                  <span className="w-1 h-1 rounded-full bg-slate-600" />
-                  <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
-                    <Clock size={12} /> {task.timeRequired}s
-                  </span>
+          <div key={task.id} className="glass-card group hover:border-highlight/30 transition-all duration-300 overflow-hidden flex flex-col sm:flex-row">
+            <div className="w-full sm:w-48 h-32 relative overflow-hidden">
+              <img src={task.imageUrl || `https://picsum.photos/seed/${task.id}/400/200`} alt={task.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+              <div className="absolute inset-0 bg-black/20" />
+            </div>
+            <div className="p-5 flex-1 flex flex-col justify-between">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="font-bold text-white text-lg font-bangla">{task.title}</h4>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-xs font-bold text-emerald-400">৳{task.amount.toFixed(2)}</span>
+                    <span className="w-1 h-1 rounded-full bg-slate-600" />
+                    <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <Clock size={12} /> {task.timeRequired}s
+                    </span>
+                  </div>
                 </div>
+                <button 
+                  onClick={() => startTask(task)}
+                  className="btn-accent px-5 py-2.5 text-sm font-bangla whitespace-nowrap"
+                >
+                  কাজ শুরু করুন
+                </button>
               </div>
             </div>
-            <button 
-              onClick={() => startTask(task)}
-              className="btn-accent px-5 py-2.5 text-sm font-bangla"
-            >
-              কাজ শুরু করুন
-            </button>
           </div>
         ))}
       </div>
@@ -1598,6 +1706,29 @@ function SupportModal({ user, tickets, setTickets, onClose }: any) {
     </div>
   );
 }
+function MaintenanceScreen() {
+  return (
+    <div className="min-h-screen bg-primary flex flex-col items-center justify-center p-6 text-center">
+      <motion.div 
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="glass-card p-12 max-w-md border-t-4 border-t-highlight"
+      >
+        <div className="w-24 h-24 bg-highlight/10 text-highlight rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl">
+          <AlertTriangle size={48} />
+        </div>
+        <h1 className="text-3xl font-bold text-white mb-4 font-bangla">কাজ চলছে...</h1>
+        <p className="text-slate-400 leading-relaxed font-medium">
+          আমাদের ওয়েবসাইটে বর্তমানে রক্ষণাবেক্ষণের কাজ চলছে। আমরা শীঘ্রই ফিরে আসব। অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন।
+        </p>
+        <div className="mt-10 pt-10 border-t border-white/5">
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">ERNIG EARN Support</p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function AdminPanel({ 
   users, 
   setUsers, 
@@ -1616,6 +1747,34 @@ function AdminPanel({
 }: any) {
   const [adminTab, setAdminTab] = useState('dashboard');
 
+  const updateSettings = (newSettings: AppSettings) => {
+    set(ref(db, 'settings'), newSettings);
+  };
+
+  const updateUsers = (newUsers: User[]) => {
+    newUsers.forEach(u => set(ref(db, `users/${u.id}`), u));
+  };
+
+  const updateTasks = (newTasks: Task[]) => {
+    const tasksObj = newTasks.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+    set(ref(db, 'tasks'), tasksObj);
+  };
+
+  const updatePlans = (newPlans: Plan[]) => {
+    const plansObj = newPlans.reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
+    set(ref(db, 'plans'), plansObj);
+  };
+
+  const updateTransactions = (newTransactions: Transaction[]) => {
+    const transObj = newTransactions.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+    set(ref(db, 'transactions'), transObj);
+  };
+
+  const updateTickets = (newTickets: SupportTicket[]) => {
+    const ticketsObj = newTickets.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+    set(ref(db, 'tickets'), ticketsObj);
+  };
+
   const stats = useMemo(() => ({
     totalUsers: users.length,
     totalBalance: users.reduce((sum: number, u: any) => sum + u.balance, 0),
@@ -1627,13 +1786,13 @@ function AdminPanel({
   const renderAdminTab = () => {
     switch (adminTab) {
       case 'dashboard': return <AdminDashboard stats={stats} />;
-      case 'users': return <AdminUsers users={users} setUsers={setUsers} impersonateUser={impersonateUser} />;
-      case 'tasks': return <AdminTasks tasks={tasks} setTasks={setTasks} />;
-      case 'plans': return <AdminPlans plans={plans} setPlans={setPlans} />;
-      case 'deposits': return <AdminDeposits transactions={transactions} setTransactions={setTransactions} setUsers={setUsers} />;
-      case 'withdrawals': return <AdminWithdrawals transactions={transactions} setTransactions={setTransactions} setUsers={setUsers} />;
-      case 'settings': return <AdminSettings settings={settings} setSettings={setSettings} />;
-      case 'support': return <AdminSupport tickets={tickets} setTickets={setTickets} />;
+      case 'users': return <AdminUsers users={users} setUsers={updateUsers} impersonateUser={impersonateUser} />;
+      case 'tasks': return <AdminTasks tasks={tasks} setTasks={updateTasks} />;
+      case 'plans': return <AdminPlans plans={plans} setPlans={updatePlans} />;
+      case 'deposits': return <AdminDeposits transactions={transactions} setTransactions={updateTransactions} setUsers={updateUsers} />;
+      case 'withdrawals': return <AdminWithdrawals transactions={transactions} setTransactions={updateTransactions} setUsers={updateUsers} />;
+      case 'settings': return <AdminSettings settings={settings} setSettings={updateSettings} />;
+      case 'support': return <AdminSupport tickets={tickets} setTickets={updateTickets} />;
       default: return <AdminDashboard stats={stats} />;
     }
   };
@@ -1835,7 +1994,7 @@ function AdminUsers({ users, setUsers, impersonateUser }: any) {
 
 function AdminTasks({ tasks, setTasks }: any) {
   const [showAdd, setShowAdd] = useState(false);
-  const [newTask, setNewTask] = useState({ title: '', description: '', amount: '', time: '', link: '', category: 'Video' });
+  const [newTask, setNewTask] = useState({ title: '', description: '', amount: '', time: '', link: '', category: 'Video', imageUrl: '' });
 
   const addTask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1847,11 +2006,12 @@ function AdminTasks({ tasks, setTasks }: any) {
       timeRequired: Number(newTask.time),
       link: newTask.link,
       category: newTask.category,
+      imageUrl: newTask.imageUrl || `https://picsum.photos/seed/${Math.random()}/400/200`,
       active: true
     };
     setTasks([...tasks, task]);
     setShowAdd(false);
-    setNewTask({ title: '', description: '', amount: '', time: '', link: '', category: 'Video' });
+    setNewTask({ title: '', description: '', amount: '', time: '', link: '', category: 'Video', imageUrl: '' });
   };
 
   const deleteTask = (id: string) => {
@@ -1871,21 +2031,29 @@ function AdminTasks({ tasks, setTasks }: any) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tasks.map((task: any) => (
-          <div key={task.id} className="glass-card p-8 group relative overflow-hidden">
+          <div key={task.id} className="glass-card group relative overflow-hidden flex flex-col">
             <button 
               onClick={() => deleteTask(task.id)} 
-              className="absolute top-6 right-6 text-slate-600 hover:text-rose-500 transition-colors"
+              className="absolute top-4 right-4 z-20 bg-black/50 p-2 rounded-full text-white hover:bg-rose-500 transition-colors"
             >
-              <XCircle size={24} />
+              <X size={16} />
             </button>
-            <div className="w-16 h-16 bg-highlight/10 text-highlight rounded-2xl flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 transition-transform">
-              <ClipboardList size={32} />
+            <div className="h-40 overflow-hidden relative">
+              <img src={task.imageUrl} alt={task.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+              <div className="absolute inset-0 bg-gradient-to-t from-primary to-transparent opacity-60" />
+              <div className="absolute bottom-4 left-4">
+                <span className="text-[10px] font-bold text-white bg-highlight px-3 py-1 rounded-full uppercase tracking-widest">{task.category}</span>
+              </div>
             </div>
-            <h4 className="font-bold text-white text-xl mb-2 tracking-tight">{task.title}</h4>
-            <p className="text-sm text-slate-500 mb-8 font-medium line-clamp-2">{task.description}</p>
-            <div className="flex justify-between items-center pt-6 border-t border-white/5">
-              <span className="text-2xl font-bold text-highlight tracking-tight">৳{task.amount}</span>
-              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{task.timeRequired}s • {task.category}</span>
+            <div className="p-6 flex-1 flex flex-col">
+              <h4 className="font-bold text-white text-lg mb-2 tracking-tight line-clamp-1">{task.title}</h4>
+              <p className="text-xs text-slate-500 mb-6 font-medium line-clamp-2 flex-1">{task.description}</p>
+              <div className="flex justify-between items-center pt-4 border-t border-white/5">
+                <span className="text-xl font-bold text-highlight tracking-tight">৳{task.amount}</span>
+                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest flex items-center gap-1">
+                  <Clock size={12} /> {task.timeRequired}s
+                </span>
+              </div>
             </div>
           </div>
         ))}
@@ -1896,13 +2064,17 @@ function AdminTasks({ tasks, setTasks }: any) {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="glass-card w-full max-w-lg p-10 relative border-t-4 border-t-highlight"
+            className="glass-card w-full max-w-lg p-10 relative border-t-4 border-t-highlight max-h-[90vh] overflow-y-auto"
           >
             <h3 className="text-2xl font-bold text-white mb-8 tracking-tight">Add New Task</h3>
             <form onSubmit={addTask} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Task Title</label>
                 <input type="text" placeholder="Enter task title" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} required />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Task Image URL</label>
+                <input type="text" placeholder="https://picsum.photos/..." className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newTask.imageUrl} onChange={e => setNewTask({...newTask, imageUrl: e.target.value})} />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Description</label>
@@ -2053,6 +2225,19 @@ function AdminWithdrawals({ transactions, setTransactions, setUsers }: any) {
 function AdminSettings({ settings, setSettings }: any) {
   return (
     <div className="max-w-3xl glass-card p-10 space-y-10 border-t-4 border-t-highlight">
+      <div className="flex items-center justify-between p-6 bg-primary/30 rounded-3xl border border-white/5">
+        <div>
+          <p className="text-lg font-bold text-white font-bangla">মেইনটেন্যান্স মোড</p>
+          <p className="text-xs text-slate-500">অন করলে সাধারণ ইউজাররা সাইটে ঢুকতে পারবে না</p>
+        </div>
+        <button 
+          onClick={() => setSettings({ ...settings, maintenanceMode: !settings.maintenanceMode })}
+          className={`w-16 h-9 rounded-full transition-all relative ${settings.maintenanceMode ? 'bg-highlight' : 'bg-slate-700'}`}
+        >
+          <div className={`absolute top-1 w-7 h-7 bg-white rounded-full transition-all shadow-lg ${settings.maintenanceMode ? 'left-8' : 'left-1'}`} />
+        </button>
+      </div>
+      
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
         <div className="space-y-3">
           <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">bKash Number</label>
