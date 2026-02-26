@@ -1,5 +1,7 @@
 {
-  "name": "",
-  "description": "",
-  "requestFramePermissions": []
+  "name": "ERNIG EARN - Earn Money Online",
+  "description": "A premium earning platform where users can complete tasks, refer others, and earn real money with a robust admin management system.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
 }

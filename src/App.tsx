@@ -111,6 +111,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [theme, setTheme] = useState(settings.themeColor);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
 
   // --- Persistence ---
   useEffect(() => {
@@ -199,16 +201,56 @@ export default function App() {
     }
   };
 
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPassword === 'ernig2026') {
+      setView('admin');
+      setShowAdminLogin(false);
+      setAdminPassword('');
+    } else {
+      alert('Invalid Admin Password');
+    }
+  };
+
   // --- Render Helpers ---
+  if (view === 'admin') {
+    return (
+      <AdminPanel 
+        users={users} 
+        setUsers={setUsers}
+        tasks={tasks}
+        setTasks={setTasks}
+        plans={plans}
+        setPlans={setPlans}
+        transactions={transactions}
+        setTransactions={setTransactions}
+        tickets={tickets}
+        setTickets={setTickets}
+        settings={settings}
+        setSettings={setSettings}
+        onLogout={() => setView(currentUser ? 'dashboard' : 'auth')}
+        impersonateUser={impersonateUser}
+      />
+    );
+  }
+
   if (!currentUser && view === 'auth') {
-    return <AuthScreen mode={authMode} setMode={setAuthMode} onLogin={handleLogin} onRegister={handleRegister} />;
+    return (
+      <div className="min-h-screen bg-primary">
+        <Header onAdminClick={() => setShowAdminLogin(true)} />
+        <AuthScreen mode={authMode} setMode={setAuthMode} onLogin={handleLogin} onRegister={handleRegister} />
+        {showAdminLogin && <AdminLoginModal password={adminPassword} setPassword={setAdminPassword} onSubmit={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans pb-20 md:pb-0">
+    <div className="min-h-screen bg-primary text-slate-200 font-sans pb-20 md:pb-0">
+      <Header onAdminClick={() => setShowAdminLogin(true)} user={currentUser} />
+      
       {/* Impersonation Banner */}
       {impersonator && (
-        <div className="bg-amber-500 text-white py-2 px-4 flex justify-between items-center sticky top-0 z-50 shadow-md">
+        <div className="bg-amber-500 text-white py-2 px-4 flex justify-between items-center sticky top-16 z-50 shadow-md">
           <span className="text-sm font-medium">Logged in as: {currentUser?.username}</span>
           <button 
             onClick={handleLogout}
@@ -220,42 +262,25 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto" style={{ '--primary': theme } as any}>
-        {currentUser?.isAdmin && !impersonator ? (
-          <AdminPanel 
-            users={users} 
-            setUsers={setUsers}
-            tasks={tasks}
-            setTasks={setTasks}
-            plans={plans}
-            setPlans={setPlans}
-            transactions={transactions}
-            setTransactions={setTransactions}
-            tickets={tickets}
-            setTickets={setTickets}
-            settings={settings}
-            setSettings={setSettings}
-            onLogout={handleLogout}
-            impersonateUser={impersonateUser}
-          />
-        ) : (
-          <UserDashboard 
-            user={currentUser!} 
-            users={users}
-            setUsers={setUsers}
-            tasks={tasks}
-            plans={plans}
-            transactions={transactions}
-            setTransactions={setTransactions}
-            tickets={tickets}
-            setTickets={setTickets}
-            settings={settings}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            onLogout={handleLogout}
-          />
-        )}
+      <div className="max-w-7xl mx-auto pt-4">
+        <UserDashboard 
+          user={currentUser!} 
+          users={users}
+          setUsers={setUsers}
+          tasks={tasks}
+          plans={plans}
+          transactions={transactions}
+          setTransactions={setTransactions}
+          tickets={tickets}
+          setTickets={setTickets}
+          settings={settings}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onLogout={handleLogout}
+        />
       </div>
+
+      {showAdminLogin && <AdminLoginModal password={adminPassword} setPassword={setAdminPassword} onSubmit={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
 
       {/* Mobile Navigation */}
       {(!currentUser?.isAdmin || impersonator) && (
@@ -310,6 +335,88 @@ function NavButton({ active, onClick, icon, label, theme }: { active: boolean, o
 }
 
 // Placeholder components to be implemented in next steps
+function Header({ onAdminClick, user }: { onAdminClick: () => void, user?: User | null }) {
+  return (
+    <header className="bg-secondary/80 backdrop-blur-lg border-b border-white/5 px-6 py-4 sticky top-0 z-50 flex justify-between items-center shadow-lg">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-gradient-to-br from-highlight to-rose-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-highlight/20">
+          <Award size={24} />
+        </div>
+        <div>
+          <h1 className="text-lg font-bold text-white leading-none tracking-tight">ERNIG EARN</h1>
+          <p className="text-[10px] text-highlight font-bold uppercase tracking-widest mt-0.5">Real & Fast</p>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-4">
+        <button 
+          onClick={onAdminClick}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/50 hover:bg-accent text-slate-300 hover:text-white transition-all text-xs font-bold border border-white/5"
+        >
+          <Settings size={14} />
+          <span>Admin</span>
+        </button>
+        
+        {user && (
+          <div className="w-10 h-10 rounded-full border-2 border-highlight p-0.5">
+            <div className="w-full h-full bg-accent rounded-full flex items-center justify-center text-white font-bold text-sm">
+              {user.username[0].toUpperCase()}
+            </div>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function AdminLoginModal({ password, setPassword, onSubmit, onClose }: any) {
+  return (
+    <div className="fixed inset-0 bg-primary/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="glass-card w-full max-w-sm p-8 relative"
+      >
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <X size={20} />
+        </button>
+        
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-16 h-16 bg-accent rounded-2xl flex items-center justify-center text-highlight mb-4 shadow-xl">
+            <ShieldCheck size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-white">Admin Access</h2>
+          <p className="text-slate-400 text-xs mt-1">Enter password to continue</p>
+        </div>
+        
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+              <ShieldCheck size={18} />
+            </div>
+            <input
+              type="password"
+              placeholder="Admin Password"
+              className="w-full bg-primary/50 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-highlight transition-all"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+              required
+            />
+          </div>
+          
+          <button
+            type="submit"
+            className="w-full btn-gradient py-4"
+          >
+            Login as Admin
+          </button>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
 function AuthScreen({ mode, setMode, onLogin, onRegister }: any) {
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
@@ -326,39 +433,38 @@ function AuthScreen({ mode, setMode, onLogin, onRegister }: any) {
   };
 
   return (
-    <div className="min-h-screen bg-indigo-700 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Decorative background elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600 rounded-full blur-3xl opacity-50" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-500 rounded-full blur-3xl opacity-50" />
+    <div className="min-h-[calc(100vh-72px)] flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute top-[20%] left-[-10%] w-[50%] h-[50%] bg-highlight/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[20%] right-[-10%] w-[50%] h-[50%] bg-accent/20 rounded-full blur-[120px] pointer-events-none" />
       
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white rounded-[32px] shadow-2xl p-8 relative z-10"
+        className="glass-card w-full max-w-md p-8 md:p-10 relative z-10"
       >
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4 shadow-inner">
-            <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white">
-              <Award size={28} />
+        <div className="flex flex-col items-center mb-10">
+          <div className="w-20 h-20 bg-accent rounded-3xl flex items-center justify-center mb-6 shadow-2xl shadow-black/50">
+            <div className="w-14 h-14 bg-gradient-to-br from-highlight to-rose-600 rounded-2xl flex items-center justify-center text-white">
+              <Award size={32} />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-indigo-900">
+          <h1 className="text-3xl font-bold text-white font-bangla">
             {mode === 'login' ? 'আবার স্বাগতম' : 'অ্যাকাউন্ট তৈরি করুন'}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-slate-400 text-sm mt-2 font-medium">
             {mode === 'login' ? 'Welcome back to ERNIG EARN' : 'Join the best earning platform'}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-              <UserIcon size={18} />
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-highlight transition-colors">
+              <UserIcon size={20} />
             </div>
             <input
               type="text"
               placeholder="ইউজার নেইম"
-              className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+              className="w-full bg-primary/40 border border-white/5 rounded-2xl py-4.5 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-highlight/50 focus:bg-primary/60 transition-all"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -366,14 +472,14 @@ function AuthScreen({ mode, setMode, onLogin, onRegister }: any) {
           </div>
 
           {mode === 'register' && (
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                <Bell size={18} />
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-highlight transition-colors">
+                <Bell size={20} />
               </div>
               <input
                 type="tel"
                 placeholder="মোবাইল নম্বর"
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                className="w-full bg-primary/40 border border-white/5 rounded-2xl py-4.5 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-highlight/50 focus:bg-primary/60 transition-all"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
@@ -381,14 +487,14 @@ function AuthScreen({ mode, setMode, onLogin, onRegister }: any) {
             </div>
           )}
 
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-              <ShieldCheck size={18} />
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-highlight transition-colors">
+              <ShieldCheck size={20} />
             </div>
             <input
               type="password"
               placeholder="পাসওয়ার্ড"
-              className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+              className="w-full bg-primary/40 border border-white/5 rounded-2xl py-4.5 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-highlight/50 focus:bg-primary/60 transition-all"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -396,14 +502,14 @@ function AuthScreen({ mode, setMode, onLogin, onRegister }: any) {
           </div>
 
           {mode === 'register' && (
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                <Users size={18} />
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-highlight transition-colors">
+                <Users size={20} />
               </div>
               <input
                 type="text"
                 placeholder="রেফার কোড (ঐচ্ছিক)"
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                className="w-full bg-primary/40 border border-white/5 rounded-2xl py-4.5 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-highlight/50 focus:bg-primary/60 transition-all"
                 value={refCode}
                 onChange={(e) => setRefCode(e.target.value)}
               />
@@ -412,11 +518,11 @@ function AuthScreen({ mode, setMode, onLogin, onRegister }: any) {
 
           {mode === 'login' && (
             <div className="flex items-center justify-between px-1">
-              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                <input type="checkbox" className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                <input type="checkbox" className="rounded border-white/10 bg-primary/50 text-highlight focus:ring-highlight" />
                 আমাকে মনে রাখুন
               </label>
-              <button type="button" className="text-sm text-indigo-600 font-medium hover:underline">
+              <button type="button" className="text-sm text-highlight font-bold hover:underline">
                 পাসওয়ার্ড ভুলে গেছেন?
               </button>
             </div>
@@ -424,28 +530,28 @@ function AuthScreen({ mode, setMode, onLogin, onRegister }: any) {
 
           <button
             type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 group"
+            className="w-full btn-gradient py-4.5 flex items-center justify-center gap-3 group"
           >
             {mode === 'login' ? (
               <>
-                <LogOut size={20} className="rotate-180 group-hover:translate-x-1 transition-transform" />
-                সাইন ইন করুন
+                <LogOut size={22} className="rotate-180 group-hover:translate-x-1 transition-transform" />
+                <span className="font-bangla">সাইন ইন করুন</span>
               </>
             ) : (
               <>
-                <Plus size={20} className="group-hover:scale-110 transition-transform" />
-                এখন নিবন্ধন করুন
+                <Plus size={22} className="group-hover:scale-110 transition-transform" />
+                <span className="font-bangla">এখন নিবন্ধন করুন</span>
               </>
             )}
           </button>
         </form>
 
-        <div className="mt-8 text-center">
-          <p className="text-slate-500 text-sm">
+        <div className="mt-10 text-center">
+          <p className="text-slate-500 text-sm font-medium">
             {mode === 'login' ? 'কোনো অ্যাকাউন্ট নেই?' : 'ইতিমধ্যে একটি অ্যাকাউন্ট আছে?'}
             <button 
               onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
-              className="ml-2 text-indigo-600 font-bold hover:underline"
+              className="ml-2 text-highlight font-bold hover:underline font-bangla"
             >
               {mode === 'login' ? 'এখানে নিবন্ধন করুন' : 'এখানে লগইন করুন'}
             </button>
@@ -472,7 +578,6 @@ function UserDashboard({
 }: any) {
   const [showDeposit, setShowDeposit] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
-  const [showSupport, setShowSupport] = useState(false);
 
   const stats = useMemo(() => {
     const userTransactions = transactions.filter((t: any) => t.userId === user.id);
@@ -487,40 +592,18 @@ function UserDashboard({
 
   const renderTab = () => {
     switch (activeTab) {
-      case 'home': return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} onSupport={() => setShowSupport(true)} settings={settings} />;
+      case 'home': return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} />;
       case 'tasks': return <TasksTab user={user} setUsers={setUsers} tasks={tasks} transactions={transactions} setTransactions={setTransactions} settings={settings} plans={plans} />;
       case 'plans': return <PlansTab user={user} setUsers={setUsers} plans={plans} transactions={transactions} setTransactions={setTransactions} settings={settings} />;
       case 'history': return <HistoryTab user={user} transactions={transactions} settings={settings} />;
       case 'profile': return <ProfileTab user={user} onLogout={onLogout} settings={settings} />;
       case 'support': return <SupportTab user={user} tickets={tickets} setTickets={setTickets} settings={settings} />;
-      default: return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} onSupport={() => setShowSupport(true)} settings={settings} />;
+      default: return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} />;
     }
   };
 
   return (
-    <div className="pb-24 min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-      {/* Header */}
-      <header className="bg-white border-b border-slate-100 px-4 py-4 sticky top-0 z-30 flex justify-between items-center shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-lg" style={{ backgroundColor: settings.themeColor }}>
-            {user.username[0].toUpperCase()}
-          </div>
-          <div>
-            <h2 className="font-bold text-slate-900 leading-none">{user.username}</h2>
-            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">ID: {user.id.slice(-4)}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button className="p-2 text-slate-400 hover:text-indigo-600 transition-colors relative">
-            <Bell size={20} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
-          </button>
-          <button onClick={() => setActiveTab('support')} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
-            <MessageSquare size={20} />
-          </button>
-        </div>
-      </header>
-
+    <div className="pb-24 min-h-[calc(100vh-80px)]">
       {/* Main View */}
       <main className="p-4 max-w-lg mx-auto">
         <AnimatePresence mode="wait">
@@ -543,44 +626,51 @@ function UserDashboard({
   );
 }
 
-function HomeTab({ user, stats, onDeposit, onWithdraw, onSupport, settings }: any) {
+function HomeTab({ user, stats, onDeposit, onWithdraw, settings }: any) {
   const [showBalance, setShowBalance] = useState(true);
 
   return (
     <div className="space-y-6">
       {/* Balance Card */}
       <div 
-        className="rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden"
-        style={{ background: `linear-gradient(135deg, ${settings.themeColor}, ${settings.themeColor}dd)` }}
+        className="rounded-[32px] p-8 text-white shadow-2xl relative overflow-hidden border border-white/10"
+        style={{ background: `linear-gradient(135deg, ${settings.themeColor}, #1e1b4b)` }}
       >
-        <div className="absolute top-[-20%] right-[-10%] w-40 h-40 bg-white/10 rounded-full blur-2xl" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-32 h-32 bg-white/5 rounded-full blur-xl" />
+        <div className="absolute top-[-20%] right-[-10%] w-48 h-48 bg-white/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-40 h-40 bg-highlight/10 rounded-full blur-2xl" />
         
         <div className="relative z-10">
-          <div className="flex justify-between items-center mb-4">
-            <span className="text-white/80 text-sm font-medium">বর্তমান ব্যালেন্স</span>
-            <button onClick={() => setShowBalance(!showBalance)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-white/70 text-xs font-bold uppercase tracking-widest font-bangla">বর্তমান ব্যালেন্স</span>
+            </div>
+            <button onClick={() => setShowBalance(!showBalance)} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all backdrop-blur-md">
               {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
             </button>
           </div>
           
-          <div className="text-4xl font-bold mb-8 flex items-baseline gap-1">
-            <span className="text-2xl font-medium">৳</span>
-            {showBalance ? user.balance.toFixed(2) : '••••••'}
+          <div className="text-5xl font-bold mb-10 flex items-baseline gap-2">
+            <span className="text-2xl font-medium text-white/60">৳</span>
+            <span className="tracking-tight">
+              {showBalance ? user.balance.toFixed(2) : '••••••'}
+            </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <button 
               onClick={onDeposit}
-              className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 transition-all"
+              className="bg-white/10 hover:bg-white/20 backdrop-blur-xl text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all border border-white/10 shadow-lg group"
             >
-              <Plus size={18} /> ডিপোজিট
+              <Plus size={20} className="group-hover:rotate-90 transition-transform" /> 
+              <span className="font-bangla">ডিপোজিট</span>
             </button>
             <button 
               onClick={onWithdraw}
-              className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 transition-all"
+              className="bg-white/10 hover:bg-white/20 backdrop-blur-xl text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all border border-white/10 shadow-lg group"
             >
-              <Wallet size={18} /> উত্তোলন
+              <Wallet size={20} className="group-hover:scale-110 transition-transform" /> 
+              <span className="font-bangla">উত্তোলন</span>
             </button>
           </div>
         </div>
@@ -588,48 +678,49 @@ function HomeTab({ user, stats, onDeposit, onWithdraw, onSupport, settings }: an
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
-          <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
-            <Award size={20} />
+        <div className="glass-card p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-2xl flex items-center justify-center shadow-inner">
+            <Award size={24} />
           </div>
           <div>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">মোট উপার্জন</p>
-            <p className="text-lg font-bold text-slate-900">৳{stats.totalEarned.toFixed(2)}</p>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-bangla">মোট উপার্জন</p>
+            <p className="text-xl font-bold text-white tracking-tight">৳{stats.totalEarned.toFixed(2)}</p>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
-            <ArrowUpCircle size={20} />
+        <div className="glass-card p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-highlight/10 text-highlight rounded-2xl flex items-center justify-center shadow-inner">
+            <ArrowUpCircle size={24} />
           </div>
           <div>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">মোট উত্তোলন</p>
-            <p className="text-lg font-bold text-slate-900">৳{stats.totalWithdrawn.toFixed(2)}</p>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-bangla">মোট উত্তোলন</p>
+            <p className="text-xl font-bold text-white tracking-tight">৳{stats.totalWithdrawn.toFixed(2)}</p>
           </div>
         </div>
       </div>
 
       {/* Quick Actions */}
-      <div>
-        <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <div className="w-1 h-4 rounded-full" style={{ backgroundColor: settings.themeColor }} />
+      <div className="glass-card p-6">
+        <h3 className="text-sm font-bold text-white mb-6 flex items-center gap-2 font-bangla">
+          <div className="w-1.5 h-5 rounded-full bg-highlight" />
           দ্রুত কার্যক্রম
         </h3>
         <div className="grid grid-cols-4 gap-4 text-center">
-          <QuickAction icon={<ClipboardList className="text-amber-500" />} label="কাজ" color="bg-amber-50" />
-          <QuickAction icon={<Plus className="text-indigo-500" />} label="ডিপোজিট" color="bg-indigo-50" />
-          <QuickAction icon={<Wallet className="text-emerald-500" />} label="উত্তোলন" color="bg-emerald-50" />
-          <QuickAction icon={<Award className="text-violet-500" />} label="প্ল্যান" color="bg-violet-50" />
+          <QuickAction icon={<ClipboardList className="text-amber-400" />} label="কাজ" color="bg-amber-400/10" />
+          <QuickAction icon={<Plus className="text-highlight" />} label="ডিপোজিট" color="bg-highlight/10" />
+          <QuickAction icon={<Wallet className="text-emerald-400" />} label="উত্তোলন" color="bg-emerald-400/10" />
+          <QuickAction icon={<Award className="text-violet-400" />} label="প্ল্যান" color="bg-violet-400/10" />
         </div>
       </div>
 
       {/* Promo Banner */}
-      <div className="bg-gradient-to-r from-amber-400 to-orange-500 rounded-3xl p-4 text-white flex items-center justify-between shadow-lg shadow-orange-100">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Limited Offer</p>
-          <h4 className="font-bold text-lg leading-tight mt-1">৩০০০ টাকা ডিপোজিট করলে<br/>১৫০০ টাকা বোনাস</h4>
+      <div className="bg-gradient-to-r from-highlight to-rose-600 rounded-[32px] p-6 text-white flex items-center justify-between shadow-2xl shadow-highlight/20 relative overflow-hidden group cursor-pointer">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+        <div className="relative z-10">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/80">Limited Offer</p>
+          <h4 className="font-bold text-xl leading-tight mt-2 font-bangla">৩০০০ টাকা ডিপোজিট করলে<br/>১৫০০ টাকা বোনাস</h4>
         </div>
-        <div className="bg-white/20 p-2 rounded-2xl backdrop-blur-sm">
-          <Award size={32} />
+        <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-md relative z-10 group-hover:rotate-12 transition-transform">
+          <Award size={36} />
         </div>
       </div>
     </div>
@@ -638,11 +729,11 @@ function HomeTab({ user, stats, onDeposit, onWithdraw, onSupport, settings }: an
 
 function QuickAction({ icon, label, color }: any) {
   return (
-    <button className="flex flex-col items-center gap-2 group">
-      <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform`}>
-        {icon}
+    <button className="flex flex-col items-center gap-3 group">
+      <div className={`w-16 h-16 ${color} rounded-2xl flex items-center justify-center shadow-lg border border-white/5 group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-300`}>
+        {React.cloneElement(icon, { size: 28 })}
       </div>
-      <span className="text-[11px] font-bold text-slate-600">{label}</span>
+      <span className="text-[11px] font-bold text-slate-400 group-hover:text-white transition-colors font-bangla">{label}</span>
     </button>
   );
 }
@@ -697,11 +788,8 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
 
     setTransactions([...transactions, transaction]);
     
-    // Update user balance and referral bonuses
     setUsers((prev: User[]) => {
       let updatedUsers = [...prev];
-      
-      // 1. Credit the user who completed the task
       updatedUsers = updatedUsers.map(u => {
         if (u.id === user.id) {
           return {
@@ -713,7 +801,6 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
         return u;
       });
 
-      // 2. Credit referrers (Multi-level)
       let currentReferrerCode = user.referredBy;
       let level = 1;
       const maxLevels = settings.referralLevels || 3;
@@ -739,11 +826,9 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
             return u;
           });
         }
-
         currentReferrerCode = referrer.referredBy;
         level++;
       }
-
       return updatedUsers;
     });
 
@@ -753,50 +838,68 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
 
   if (completingTask) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="w-32 h-32 rounded-full border-8 border-indigo-100 border-t-indigo-600 animate-spin mb-8 flex items-center justify-center">
-          <span className="text-2xl font-bold text-indigo-600 animate-none">{timer}s</span>
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="relative w-40 h-40 mb-10">
+          <div className="absolute inset-0 rounded-full border-4 border-white/5" />
+          <div 
+            className="absolute inset-0 rounded-full border-4 border-highlight border-t-transparent animate-spin" 
+            style={{ animationDuration: '1.5s' }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-4xl font-bold text-white">{timer}s</span>
+          </div>
         </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">{completingTask.title}</h2>
-        <p className="text-slate-500">অনুগ্রহ করে অপেক্ষা করুন, আপনার কাজ যাচাই করা হচ্ছে...</p>
+        <h2 className="text-2xl font-bold text-white mb-3 font-bangla">{completingTask.title}</h2>
+        <p className="text-slate-400 font-medium">অনুগ্রহ করে অপেক্ষা করুন, আপনার কাজ যাচাই করা হচ্ছে...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex justify-between items-center">
+    <div className="space-y-6">
+      <div className="glass-card p-6 flex justify-between items-center border-l-4 border-l-highlight">
         <div>
-          <p className="text-xs text-slate-500 font-bold uppercase">আজকের কাজ</p>
-          <p className="text-lg font-bold text-slate-900">{tasksDoneToday} / {activePlan?.dailyTasks || 0}</p>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-bangla">আজকের কাজ</p>
+          <p className="text-2xl font-bold text-white">{tasksDoneToday} / {activePlan?.dailyTasks || 0}</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-500 font-bold uppercase">সক্রিয় প্ল্যান</p>
-          <p className="text-sm font-bold text-indigo-600">{activePlan?.name || 'কোনোটিই নয়'}</p>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-bangla">সক্রিয় প্ল্যান</p>
+          <p className="text-sm font-bold text-highlight">{activePlan?.name || 'কোনোটিই নয়'}</p>
         </div>
       </div>
 
-      <h3 className="text-lg font-bold text-slate-900 mb-2">উপলব্ধ বিজ্ঞাপন</h3>
-      {tasks.filter((t: any) => t.active).map((task: any) => (
-        <div key={task.id} className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-colors">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
-              <ClipboardList size={24} />
+      <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2 font-bangla">
+        <div className="w-1.5 h-5 rounded-full bg-highlight" />
+        উপলব্ধ বিজ্ঞাপন
+      </h3>
+      
+      <div className="space-y-4">
+        {tasks.filter((t: any) => t.active).map((task: any) => (
+          <div key={task.id} className="glass-card p-5 flex items-center justify-between group hover:border-highlight/30 transition-all duration-300">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-accent rounded-2xl flex items-center justify-center text-highlight shadow-lg group-hover:scale-110 transition-transform">
+                <ClipboardList size={28} />
+              </div>
+              <div>
+                <h4 className="font-bold text-white text-lg font-bangla">{task.title}</h4>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-xs font-bold text-emerald-400">৳{task.amount.toFixed(2)}</span>
+                  <span className="w-1 h-1 rounded-full bg-slate-600" />
+                  <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                    <Clock size={12} /> {task.timeRequired}s
+                  </span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h4 className="font-bold text-slate-900">{task.title}</h4>
-              <p className="text-xs text-slate-500">৳{task.amount.toFixed(2)} • {task.timeRequired}s</p>
-            </div>
+            <button 
+              onClick={() => startTask(task)}
+              className="btn-accent px-5 py-2.5 text-sm font-bangla"
+            >
+              কাজ শুরু করুন
+            </button>
           </div>
-          <button 
-            onClick={() => startTask(task)}
-            className="text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors"
-            style={{ backgroundColor: settings.themeColor }}
-          >
-            কাজ শুরু করুন
-          </button>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -838,45 +941,62 @@ function PlansTab({ user, setUsers, plans, transactions, setTransactions, settin
   };
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-slate-900 text-center">বিনিয়োগ প্ল্যান নির্বাচন করুন</h3>
+    <div className="space-y-8">
+      <div className="text-center">
+        <h3 className="text-2xl font-bold text-white font-bangla">বিনিয়োগ প্ল্যান নির্বাচন করুন</h3>
+        <p className="text-slate-500 text-sm mt-2">আপনার আয়ের লিমিট বাড়াতে একটি প্ল্যান বেছে নিন</p>
+      </div>
+      
       <div className="grid grid-cols-1 gap-6">
         {plans.filter((p: any) => p.active).map((plan: any) => (
           <div 
             key={plan.id} 
-            className={`bg-white rounded-[32px] p-6 shadow-sm border-2 transition-all ${user.activePlanId === plan.id ? 'border-indigo-600 ring-4 ring-indigo-50' : 'border-slate-100'}`}
+            className={`glass-card p-8 relative overflow-hidden transition-all duration-500 ${user.activePlanId === plan.id ? 'border-highlight ring-4 ring-highlight/10 scale-[1.02]' : 'hover:border-white/20'}`}
           >
-            <div className="flex justify-between items-start mb-4">
+            {user.activePlanId === plan.id && (
+              <div className="absolute top-0 right-0 bg-highlight text-white text-[10px] font-bold px-4 py-1 rounded-bl-2xl uppercase tracking-widest shadow-lg">
+                Active Plan
+              </div>
+            )}
+            
+            <div className="flex justify-between items-start mb-8">
               <div>
-                <h4 className="text-xl font-bold text-slate-900">{plan.name}</h4>
-                <p className="text-sm text-slate-500">{plan.validityDays} দিন মেয়াদী</p>
+                <h4 className="text-2xl font-bold text-white font-bangla">{plan.name}</h4>
+                <div className="flex items-center gap-2 mt-1">
+                  <Clock size={14} className="text-slate-500" />
+                  <p className="text-sm text-slate-500 font-medium">{plan.validityDays} দিন মেয়াদী</p>
+                </div>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-bold text-indigo-600">৳{plan.price}</p>
-                {user.activePlanId === plan.id && <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase">Active</span>}
+                <p className="text-3xl font-bold text-highlight tracking-tight">৳{plan.price}</p>
               </div>
             </div>
             
-            <div className="space-y-3 mb-6">
-              <div className="flex items-center gap-3 text-sm text-slate-600">
-                <CheckCircle2 size={18} className="text-emerald-500" />
-                <span>প্রতিদিন কাজ: {plan.dailyTasks} টি</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+              <div className="flex items-center gap-3 text-slate-300 bg-white/5 p-3 rounded-2xl border border-white/5">
+                <div className="w-8 h-8 bg-emerald-500/10 text-emerald-500 rounded-lg flex items-center justify-center">
+                  <CheckCircle2 size={18} />
+                </div>
+                <span className="text-sm font-medium font-bangla">প্রতিদিন কাজ: {plan.dailyTasks} টি</span>
               </div>
-              <div className="flex items-center gap-3 text-sm text-slate-600">
-                <CheckCircle2 size={18} className="text-emerald-500" />
-                <span>প্রতিদিন আয়: ৳{plan.dailyEarning}</span>
+              <div className="flex items-center gap-3 text-slate-300 bg-white/5 p-3 rounded-2xl border border-white/5">
+                <div className="w-8 h-8 bg-highlight/10 text-highlight rounded-lg flex items-center justify-center">
+                  <Award size={18} />
+                </div>
+                <span className="text-sm font-medium font-bangla">প্রতিদিন আয়: ৳{plan.dailyEarning}</span>
               </div>
-              <div className="flex items-center gap-3 text-sm text-slate-600">
-                <CheckCircle2 size={18} className="text-emerald-500" />
-                <span>মোট আয়: ৳{plan.dailyEarning * plan.validityDays}</span>
+              <div className="flex items-center gap-3 text-slate-300 bg-white/5 p-3 rounded-2xl border border-white/5 sm:col-span-2">
+                <div className="w-8 h-8 bg-violet-500/10 text-violet-500 rounded-lg flex items-center justify-center">
+                  <ArrowUpCircle size={18} />
+                </div>
+                <span className="text-sm font-medium font-bangla">মোট সম্ভাব্য আয়: ৳{plan.dailyEarning * plan.validityDays}</span>
               </div>
             </div>
 
             <button 
               onClick={() => buyPlan(plan)}
               disabled={user.activePlanId === plan.id}
-              className={`w-full py-4 rounded-2xl font-bold transition-all ${user.activePlanId === plan.id ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'text-white shadow-lg shadow-indigo-100 hover:scale-[1.02]'}`}
-              style={{ backgroundColor: user.activePlanId === plan.id ? undefined : settings.themeColor }}
+              className={`w-full py-4.5 rounded-2xl font-bold transition-all duration-300 font-bangla ${user.activePlanId === plan.id ? 'bg-white/5 text-slate-600 cursor-not-allowed border border-white/5' : 'btn-gradient shadow-highlight/20 hover:scale-[1.02]'}`}
             >
               {user.activePlanId === plan.id ? 'ইতিমধ্যে সক্রিয়' : 'প্ল্যান কিনুন'}
             </button>
@@ -897,43 +1017,52 @@ function ReferTab({ user, users, settings }: any) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 text-center">
-        <div className="w-16 h-16 bg-violet-50 text-violet-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Users size={32} />
+    <div className="space-y-8">
+      <div className="glass-card p-8 text-center relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-highlight" />
+        <div className="w-20 h-20 bg-violet-500/10 text-violet-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+          <Users size={40} />
         </div>
-        <h3 className="text-xl font-bold text-slate-900 mb-2">রেফার করুন এবং আয় করুন</h3>
-        <p className="text-slate-500 text-sm mb-6">আপনার বন্ধুদের আমন্ত্রণ জানান এবং প্রতিটি সফল রেফারেলের জন্য বোনাস পান।</p>
+        <h3 className="text-2xl font-bold text-white mb-3 font-bangla">রেফার করুন এবং আয় করুন</h3>
+        <p className="text-slate-400 text-sm mb-8 font-medium">আপনার বন্ধুদের আমন্ত্রণ জানান এবং প্রতিটি সফল রেফারেলের জন্য বোনাস পান।</p>
         
-        <div className="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-200 flex items-center justify-between gap-3">
-          <span className="text-xs font-mono text-slate-600 truncate">{referralLink}</span>
-          <button onClick={copyToClipboard} className="bg-white p-2 rounded-xl shadow-sm text-indigo-600 hover:bg-indigo-50 transition-colors">
-            <Copy size={18} />
+        <div className="bg-primary/50 p-5 rounded-2xl border border-white/5 flex items-center justify-between gap-4 group">
+          <span className="text-xs font-mono text-slate-500 truncate select-all">{referralLink}</span>
+          <button 
+            onClick={copyToClipboard} 
+            className="bg-accent hover:bg-highlight text-white p-3 rounded-xl transition-all shadow-lg group-hover:scale-110"
+          >
+            <Copy size={20} />
           </button>
         </div>
       </div>
 
       <div>
-        <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <div className="w-1 h-4 bg-violet-600 rounded-full" />
+        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3 font-bangla">
+          <div className="w-1.5 h-5 bg-violet-500 rounded-full" />
           আপনার রেফারেল তালিকা ({referrals.length})
         </h3>
-        <div className="space-y-3">
+        <div className="space-y-4">
           {referrals.length > 0 ? referrals.map((ref: any) => (
-            <div key={ref.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-600 text-xs font-bold">
+            <div key={ref.id} className="glass-card p-5 flex items-center justify-between group hover:border-white/10 transition-all">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-accent rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:rotate-6 transition-transform">
                   {ref.username[0].toUpperCase()}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-slate-900">{ref.username}</p>
-                  <p className="text-[10px] text-slate-500">{new Date(ref.createdAt).toLocaleDateString()}</p>
+                  <p className="font-bold text-white text-lg">{ref.username}</p>
+                  <p className="text-xs text-slate-500 font-medium">{new Date(ref.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
-              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">Active</span>
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full uppercase tracking-widest">Active</span>
+                <p className="text-[10px] text-slate-600 font-bold">LEVEL 1</p>
+              </div>
             </div>
           )) : (
-            <div className="text-center py-8 text-slate-400 italic text-sm">No referrals yet</div>
+            <div className="glass-card py-16 text-center text-slate-500 italic text-sm font-medium">
+              No referrals yet. Start inviting friends!
+            </div>
           )}
         </div>
       </div>
@@ -944,42 +1073,48 @@ function ReferTab({ user, users, settings }: any) {
 function HistoryTab({ user, transactions, settings }: any) {
   const userTransactions = [...transactions]
     .filter((t: any) => t.userId === user.id)
-    .sort((a: any) => a.createdAt - 1);
+    .sort((a: any, b: any) => b.createdAt - a.createdAt);
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-900 mb-2">লেনদেন ইতিহাস</h3>
+    <div className="space-y-6">
+      <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2 font-bangla">
+        <div className="w-1.5 h-5 rounded-full bg-highlight" />
+        লেনদেন ইতিহাস
+      </h3>
+      
       {userTransactions.length > 0 ? userTransactions.map((t: any) => (
-        <div key={t.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-              t.type === 'deposit' ? 'bg-emerald-50 text-emerald-600' :
-              t.type === 'withdrawal' ? 'bg-rose-50 text-rose-600' :
-              t.type === 'task' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-600'
+        <div key={t.id} className="glass-card p-5 flex items-center justify-between group hover:border-white/10 transition-all">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
+              t.type === 'deposit' ? 'bg-emerald-500/10 text-emerald-500' :
+              t.type === 'withdrawal' ? 'bg-rose-500/10 text-rose-500' :
+              t.type === 'task' ? 'bg-highlight/10 text-highlight' : 'bg-accent text-slate-300'
             }`}>
-              {t.type === 'deposit' ? <ArrowDownCircle size={20} /> :
-               t.type === 'withdrawal' ? <ArrowUpCircle size={20} /> :
-               t.type === 'task' ? <ClipboardList size={20} /> : <Award size={20} />}
+              {t.type === 'deposit' ? <ArrowDownCircle size={24} /> :
+               t.type === 'withdrawal' ? <ArrowUpCircle size={24} /> :
+               t.type === 'task' ? <ClipboardList size={24} /> : <Award size={24} />}
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900 capitalize">{t.type.replace('_', ' ')}</p>
-              <p className="text-[10px] text-slate-500">{new Date(t.createdAt).toLocaleString()}</p>
+              <p className="font-bold text-white capitalize text-lg font-bangla">{t.type.replace('_', ' ')}</p>
+              <p className="text-[10px] text-slate-500 font-medium mt-0.5">{new Date(t.createdAt).toLocaleString()}</p>
             </div>
           </div>
           <div className="text-right">
-            <p className={`font-bold ${t.type === 'deposit' || t.type === 'task' || t.type === 'referral' ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {t.type === 'deposit' || t.type === 'task' || t.type === 'referral' ? '+' : '-'} ৳{t.amount}
+            <p className={`text-lg font-bold tracking-tight ${t.type === 'deposit' || t.type === 'task' || t.type === 'referral' ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {t.type === 'deposit' || t.type === 'task' || t.type === 'referral' ? '+' : '-'} ৳{t.amount.toFixed(2)}
             </p>
-            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md ${
-              t.status === 'approved' || t.status === 'paid' ? 'bg-emerald-50 text-emerald-600' :
-              t.status === 'pending' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
+            <span className={`text-[9px] font-bold uppercase px-2 py-1 rounded-lg mt-1 inline-block tracking-widest ${
+              t.status === 'approved' || t.status === 'paid' ? 'bg-emerald-400/10 text-emerald-400' :
+              t.status === 'pending' ? 'bg-amber-400/10 text-amber-400' : 'bg-rose-400/10 text-rose-400'
             }`}>
               {t.status}
             </span>
           </div>
         </div>
       )) : (
-        <div className="text-center py-12 text-slate-400 italic text-sm">No transactions found</div>
+        <div className="glass-card py-20 text-center text-slate-500 italic text-sm font-medium">
+          No transactions found yet.
+        </div>
       )}
     </div>
   );
@@ -1005,7 +1140,6 @@ function SupportTab({ user, tickets, setTickets, settings }: any) {
       replies: []
     };
 
-    // Simple AI Bot response
     const botReply = {
       id: Date.now().toString(),
       senderId: 'bot',
@@ -1025,11 +1159,10 @@ function SupportTab({ user, tickets, setTickets, settings }: any) {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-bold text-slate-900">সাপোর্ট টিকেট</h3>
+        <h3 className="text-xl font-bold text-white font-bangla">সাপোর্ট টিকেট</h3>
         <button 
           onClick={() => setShowForm(!showForm)}
-          className="text-white px-4 py-2 rounded-xl text-sm font-bold"
-          style={{ backgroundColor: settings.themeColor }}
+          className="btn-accent px-5 py-2.5 text-sm font-bangla"
         >
           {showForm ? 'বন্ধ করুন' : 'নতুন টিকেট'}
         </button>
@@ -1040,51 +1173,63 @@ function SupportTab({ user, tickets, setTickets, settings }: any) {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           onSubmit={handleSubmit} 
-          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4"
+          className="glass-card p-8 space-y-5 border-l-4 border-l-highlight"
         >
-          <input 
-            type="text" 
-            placeholder="বিষয়" 
-            className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            required
-          />
-          <textarea 
-            placeholder="আপনার সমস্যা বিস্তারিত লিখুন" 
-            className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 h-32 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            required
-          />
-          <button type="submit" className="w-full text-white font-bold py-3 rounded-xl shadow-lg" style={{ backgroundColor: settings.themeColor }}>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest font-bangla">বিষয়</label>
+            <input 
+              type="text" 
+              placeholder="আপনার সমস্যার বিষয় লিখুন" 
+              className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest font-bangla">বিস্তারিত</label>
+            <textarea 
+              placeholder="আপনার সমস্যা বিস্তারিত লিখুন" 
+              className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 h-40 resize-none text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              required
+            />
+          </div>
+          <button type="submit" className="w-full btn-gradient py-4.5 font-bangla">
             টিকিট জমা দিন
           </button>
         </motion.form>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {userTickets.length > 0 ? userTickets.map((ticket: any) => (
-          <div key={ticket.id} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-            <div className="flex justify-between items-start mb-3">
-              <h4 className="font-bold text-slate-900">{ticket.subject}</h4>
-              <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${
-                ticket.status === 'open' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
+          <div key={ticket.id} className="glass-card p-6 group hover:border-white/10 transition-all">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h4 className="font-bold text-white text-lg font-bangla">{ticket.subject}</h4>
+                <p className="text-[10px] text-slate-500 font-medium mt-1 uppercase tracking-widest">Ticket ID: #{ticket.id.toUpperCase()}</p>
+              </div>
+              <span className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full tracking-widest ${
+                ticket.status === 'open' ? 'bg-amber-400/10 text-amber-400' : 'bg-emerald-400/10 text-emerald-400'
               }`}>
                 {ticket.status}
               </span>
             </div>
-            <p className="text-sm text-slate-600 mb-4">{ticket.message}</p>
+            <p className="text-sm text-slate-400 mb-6 leading-relaxed font-medium">"{ticket.message}"</p>
             
             {ticket.replies.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-slate-50">
+              <div className="space-y-4 pt-6 border-t border-white/5">
                 {ticket.replies.map((reply: any) => (
                   <div key={reply.id} className={`flex ${reply.isAdmin ? 'justify-start' : 'justify-end'}`}>
-                    <div className={`max-w-[80%] p-3 rounded-2xl text-xs ${
-                      reply.isAdmin ? 'bg-indigo-50 text-indigo-700 rounded-tl-none' : 'bg-slate-100 text-slate-700 rounded-tr-none'
+                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm shadow-xl ${
+                      reply.isAdmin ? 'bg-accent/50 text-slate-200 rounded-tl-none border border-white/5' : 'bg-highlight/10 text-white rounded-tr-none border border-highlight/20'
                     }`}>
-                      <p className="font-bold text-[9px] uppercase mb-1 opacity-60">{reply.senderId === 'bot' ? 'AI Assistant' : reply.isAdmin ? 'Admin' : 'You'}</p>
-                      {reply.message}
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-1.5 h-1.5 rounded-full ${reply.senderId === 'bot' ? 'bg-violet-400' : reply.isAdmin ? 'bg-highlight' : 'bg-emerald-400'}`} />
+                        <p className="font-bold text-[10px] uppercase tracking-widest opacity-60">{reply.senderId === 'bot' ? 'AI Assistant' : reply.isAdmin ? 'Admin' : 'You'}</p>
+                      </div>
+                      <p className="font-medium leading-relaxed">{reply.message}</p>
                     </div>
                   </div>
                 ))}
@@ -1092,7 +1237,9 @@ function SupportTab({ user, tickets, setTickets, settings }: any) {
             )}
           </div>
         )) : (
-          <div className="text-center py-12 text-slate-400 italic text-sm">No support tickets found</div>
+          <div className="glass-card py-20 text-center text-slate-500 italic text-sm font-medium">
+            No support tickets found. We're here to help!
+          </div>
         )}
       </div>
     </div>
@@ -1101,40 +1248,42 @@ function SupportTab({ user, tickets, setTickets, settings }: any) {
 
 function ProfileTab({ user, onLogout, settings }: any) {
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 text-center relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-24 opacity-10" style={{ backgroundColor: settings.themeColor }} />
+    <div className="space-y-8">
+      <div className="glass-card p-10 text-center relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-highlight/20 to-transparent" />
         <div 
-          className="w-24 h-24 rounded-full flex items-center justify-center text-white text-4xl font-bold mx-auto mb-4 shadow-xl relative z-10 border-4 border-white"
-          style={{ backgroundColor: settings.themeColor }}
+          className="w-28 h-28 rounded-[40px] flex items-center justify-center text-white text-5xl font-bold mx-auto mb-6 shadow-2xl relative z-10 border-4 border-secondary ring-4 ring-highlight/20 bg-accent"
         >
           {user.username[0].toUpperCase()}
         </div>
-        <h3 className="text-2xl font-bold text-slate-900">{user.username}</h3>
-        <p className="text-slate-500 font-medium">{user.phone}</p>
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
-          <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-full text-xs font-bold">
+        <h3 className="text-3xl font-bold text-white tracking-tight">{user.username}</h3>
+        <p className="text-slate-500 font-bold mt-1 tracking-wider">{user.phone}</p>
+        
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <div className="inline-flex items-center gap-2 bg-emerald-500/10 text-emerald-400 px-4 py-2 rounded-2xl text-[10px] font-bold uppercase tracking-widest border border-emerald-500/10">
             <ShieldCheck size={14} /> Verified Account
           </div>
           {user.activePlanId && (
-            <div className="inline-flex items-center gap-2 bg-amber-50 text-amber-600 px-3 py-1.5 rounded-full text-xs font-bold border border-amber-100">
+            <div className="inline-flex items-center gap-2 bg-highlight/10 text-highlight px-4 py-2 rounded-2xl text-[10px] font-bold uppercase tracking-widest border border-highlight/10">
               <Award size={14} /> Premium Member
             </div>
           )}
         </div>
       </div>
 
-      <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-        <ProfileItem icon={<UserIcon size={20} />} label="ব্যক্তিগত তথ্য" />
-        <ProfileItem icon={<Wallet size={20} />} label="পেমেন্ট মেথড" />
-        <ProfileItem icon={<Settings size={20} />} label="সেটিংস" />
-        <ProfileItem icon={<ShieldCheck size={20} />} label="নিরাপত্তা" />
+      <div className="glass-card overflow-hidden divide-y divide-white/5">
+        <ProfileItem icon={<UserIcon size={22} />} label="ব্যক্তিগত তথ্য" />
+        <ProfileItem icon={<Wallet size={22} />} label="পেমেন্ট মেথড" />
+        <ProfileItem icon={<Settings size={22} />} label="সেটিংস" />
+        <ProfileItem icon={<ShieldCheck size={22} />} label="নিরাপত্তা" />
         <button 
           onClick={onLogout}
-          className="w-full p-5 flex items-center gap-4 text-rose-600 hover:bg-rose-50 transition-colors border-t border-slate-50"
+          className="w-full p-6 flex items-center gap-5 text-rose-500 hover:bg-rose-500/5 transition-all group"
         >
-          <LogOut size={20} />
-          <span className="font-bold">লগ আউট করুন</span>
+          <div className="w-12 h-12 bg-rose-500/10 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+            <LogOut size={24} />
+          </div>
+          <span className="font-bold text-lg font-bangla">লগ আউট করুন</span>
         </button>
       </div>
     </div>
@@ -1143,12 +1292,14 @@ function ProfileTab({ user, onLogout, settings }: any) {
 
 function ProfileItem({ icon, label }: any) {
   return (
-    <button className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
-      <div className="flex items-center gap-4 text-slate-700">
-        <div className="text-slate-400">{icon}</div>
-        <span className="font-bold">{label}</span>
+    <button className="w-full p-6 flex items-center justify-between hover:bg-white/5 transition-all group">
+      <div className="flex items-center gap-5">
+        <div className="w-12 h-12 bg-accent rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-highlight group-hover:scale-110 transition-all">
+          {icon}
+        </div>
+        <span className="font-bold text-white text-lg font-bangla">{label}</span>
       </div>
-      <ChevronRight size={18} className="text-slate-300" />
+      <ChevronRight size={20} className="text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all" />
     </button>
   );
 }
@@ -1182,71 +1333,81 @@ function DepositModal({ user, settings, onClose, onSubmit }: any) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-primary/90 backdrop-blur-md z-[100] flex items-end md:items-center justify-center p-4">
       <motion.div 
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="bg-white w-full max-w-md rounded-t-[32px] md:rounded-[32px] p-6 shadow-2xl"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="glass-card w-full max-w-md p-8 relative border-t-4 border-t-highlight rounded-t-[40px] md:rounded-[40px]"
       >
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-slate-900">ডিপোজিট করুন</h3>
-          <button onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-500"><X size={20} /></button>
+        <div className="flex justify-between items-center mb-8">
+          <h3 className="text-2xl font-bold text-white font-bangla">ডিপোজিট করুন</h3>
+          <button onClick={onClose} className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-slate-400 transition-all"><X size={24} /></button>
         </div>
 
-        <div className="bg-indigo-50 p-4 rounded-2xl mb-6 flex gap-3">
-          <Bell className="text-indigo-600 shrink-0" size={20} />
-          <p className="text-xs text-indigo-700 leading-relaxed">{settings.depositInstructions}</p>
+        <div className="bg-highlight/10 p-5 rounded-2xl mb-8 flex gap-4 border border-highlight/20">
+          <Bell className="text-highlight shrink-0" size={24} />
+          <p className="text-xs text-slate-300 leading-relaxed font-medium">{settings.depositInstructions}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid grid-cols-2 gap-4">
             <button 
               type="button"
               onClick={() => setMethod('bKash')}
-              className={`py-3 rounded-2xl border-2 font-bold transition-all ${method === 'bKash' ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-100 text-slate-400'}`}
+              className={`py-4 rounded-2xl border-2 font-bold transition-all flex items-center justify-center gap-2 ${method === 'bKash' ? 'border-highlight bg-highlight/10 text-highlight' : 'border-white/5 bg-white/5 text-slate-500'}`}
             >
+              <div className={`w-2 h-2 rounded-full ${method === 'bKash' ? 'bg-highlight' : 'bg-slate-700'}`} />
               bKash
             </button>
             <button 
               type="button"
               onClick={() => setMethod('Nagad')}
-              className={`py-3 rounded-2xl border-2 font-bold transition-all ${method === 'Nagad' ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-100 text-slate-400'}`}
+              className={`py-4 rounded-2xl border-2 font-bold transition-all flex items-center justify-center gap-2 ${method === 'Nagad' ? 'border-highlight bg-highlight/10 text-highlight' : 'border-white/5 bg-white/5 text-slate-500'}`}
             >
+              <div className={`w-2 h-2 rounded-full ${method === 'Nagad' ? 'bg-highlight' : 'bg-slate-700'}`} />
               Nagad
             </button>
           </div>
 
-          <div className="bg-slate-100 p-4 rounded-2xl text-center">
-            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Send Money To ({method})</p>
-            <p className="text-xl font-mono font-bold text-indigo-600">{method === 'bKash' ? settings.bkashNumber : settings.nagadNumber}</p>
+          <div className="bg-primary/50 p-6 rounded-3xl text-center border border-white/5 shadow-inner">
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-2">Send Money To ({method})</p>
+            <p className="text-2xl font-mono font-bold text-highlight tracking-wider">{method === 'bKash' ? settings.bkashNumber : settings.nagadNumber}</p>
           </div>
 
-          <input 
-            type="number" 
-            placeholder="টাকার পরিমাণ (৳)" 
-            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-          />
-          <input 
-            type="text" 
-            placeholder="ট্রানজেকশন আইডি (TrxID)" 
-            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={trxId}
-            onChange={(e) => setTrxId(e.target.value)}
-            required
-          />
-          <input 
-            type="tel" 
-            placeholder="আপনার নম্বর" 
-            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={sender}
-            onChange={(e) => setSender(e.target.value)}
-            required
-          />
+          <div className="space-y-4">
+            <div className="relative group">
+              <input 
+                type="number" 
+                placeholder="টাকার পরিমাণ (৳)" 
+                className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4.5 px-6 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </div>
+            <div className="relative group">
+              <input 
+                type="text" 
+                placeholder="ট্রানজেকশন আইডি (TrxID)" 
+                className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4.5 px-6 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
+                value={trxId}
+                onChange={(e) => setTrxId(e.target.value)}
+                required
+              />
+            </div>
+            <div className="relative group">
+              <input 
+                type="tel" 
+                placeholder="আপনার নম্বর" 
+                className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4.5 px-6 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
+                value={sender}
+                onChange={(e) => setSender(e.target.value)}
+                required
+              />
+            </div>
+          </div>
 
-          <button type="submit" className="w-full text-white font-bold py-4 rounded-2xl shadow-lg mt-4" style={{ backgroundColor: settings.themeColor }}>
+          <button type="submit" className="w-full btn-gradient py-4.5 mt-4 font-bangla">
             নিশ্চিত করুন
           </button>
         </form>
@@ -1282,58 +1443,66 @@ function WithdrawModal({ user, settings, onClose, onSubmit }: any) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-primary/90 backdrop-blur-md z-[100] flex items-end md:items-center justify-center p-4">
       <motion.div 
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="bg-white w-full max-w-md rounded-t-[32px] md:rounded-[32px] p-6 shadow-2xl"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="glass-card w-full max-w-md p-8 relative border-t-4 border-t-rose-500 rounded-t-[40px] md:rounded-[40px]"
       >
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-slate-900">টাকা উত্তোলন</h3>
-          <button onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-500"><X size={20} /></button>
+        <div className="flex justify-between items-center mb-8">
+          <h3 className="text-2xl font-bold text-white font-bangla">টাকা উত্তোলন</h3>
+          <button onClick={onClose} className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-slate-400 transition-all"><X size={24} /></button>
         </div>
 
-        <div className="bg-slate-50 p-4 rounded-2xl mb-6 text-center">
-          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Available Balance</p>
-          <p className="text-2xl font-bold text-slate-900">৳{user.balance.toFixed(2)}</p>
+        <div className="bg-rose-500/10 p-6 rounded-3xl mb-8 text-center border border-rose-500/20 shadow-inner">
+          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-2">Available Balance</p>
+          <p className="text-3xl font-bold text-white tracking-tight">৳{user.balance.toFixed(2)}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid grid-cols-2 gap-4">
             <button 
               type="button"
               onClick={() => setMethod('bKash')}
-              className={`py-3 rounded-2xl border-2 font-bold transition-all ${method === 'bKash' ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-100 text-slate-400'}`}
+              className={`py-4 rounded-2xl border-2 font-bold transition-all flex items-center justify-center gap-2 ${method === 'bKash' ? 'border-rose-500 bg-rose-500/10 text-rose-500' : 'border-white/5 bg-white/5 text-slate-500'}`}
             >
+              <div className={`w-2 h-2 rounded-full ${method === 'bKash' ? 'bg-rose-500' : 'bg-slate-700'}`} />
               bKash
             </button>
             <button 
               type="button"
               onClick={() => setMethod('Nagad')}
-              className={`py-3 rounded-2xl border-2 font-bold transition-all ${method === 'Nagad' ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-100 text-slate-400'}`}
+              className={`py-4 rounded-2xl border-2 font-bold transition-all flex items-center justify-center gap-2 ${method === 'Nagad' ? 'border-rose-500 bg-rose-500/10 text-rose-500' : 'border-white/5 bg-white/5 text-slate-500'}`}
             >
+              <div className={`w-2 h-2 rounded-full ${method === 'Nagad' ? 'bg-rose-500' : 'bg-slate-700'}`} />
               Nagad
             </button>
           </div>
 
-          <input 
-            type="number" 
-            placeholder="টাকার পরিমাণ (৳)" 
-            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-          />
-          <input 
-            type="tel" 
-            placeholder="আপনার অ্যাকাউন্ট নম্বর" 
-            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={account}
-            onChange={(e) => setAccount(e.target.value)}
-            required
-          />
+          <div className="space-y-4">
+            <div className="relative group">
+              <input 
+                type="number" 
+                placeholder="টাকার পরিমাণ (৳)" 
+                className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4.5 px-6 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/50 transition-all"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </div>
+            <div className="relative group">
+              <input 
+                type="tel" 
+                placeholder="আপনার অ্যাকাউন্ট নম্বর" 
+                className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4.5 px-6 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/50 transition-all"
+                value={account}
+                onChange={(e) => setAccount(e.target.value)}
+                required
+              />
+            </div>
+          </div>
 
-          <button type="submit" className="w-full text-white font-bold py-4 rounded-2xl shadow-lg mt-4" style={{ backgroundColor: settings.themeColor }}>
+          <button type="submit" className="w-full bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-bold py-4.5 rounded-2xl shadow-lg shadow-rose-500/20 mt-4 transition-all font-bangla">
             উত্তোলন প্রক্রিয়া করুন
           </button>
         </form>
@@ -1470,60 +1639,70 @@ function AdminPanel({
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50">
+    <div className="flex flex-col md:flex-row min-h-screen bg-primary text-slate-200">
       {/* Admin Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-900 text-slate-300 p-6 flex flex-col sticky top-0 md:h-screen z-40">
-        <div className="flex items-center gap-3 mb-10 px-2">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
-            <ShieldCheck size={20} />
+      <aside className="w-full md:w-72 bg-secondary border-r border-white/5 flex flex-col sticky top-0 md:h-screen z-40 shadow-2xl">
+        <div className="p-8 flex items-center gap-4 border-b border-white/5">
+          <div className="w-12 h-12 bg-highlight rounded-2xl flex items-center justify-center text-white shadow-lg shadow-highlight/20">
+            <ShieldCheck size={28} />
           </div>
-          <h1 className="text-xl font-bold text-white tracking-tight">Admin Panel</h1>
+          <div>
+            <h1 className="text-xl font-bold text-white tracking-tight">Admin Panel</h1>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Super Admin Control</p>
+          </div>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto">
-          <AdminNavItem active={adminTab === 'dashboard'} onClick={() => setAdminTab('dashboard')} icon={<LayoutDashboard size={20} />} label="Dashboard" />
-          <AdminNavItem active={adminTab === 'users'} onClick={() => setAdminTab('users')} icon={<Users size={20} />} label="Users" />
-          <AdminNavItem active={adminTab === 'tasks'} onClick={() => setAdminTab('tasks')} icon={<ClipboardList size={20} />} label="Tasks" />
-          <AdminNavItem active={adminTab === 'plans'} onClick={() => setAdminTab('plans')} icon={<Award size={20} />} label="Plans" />
-          <AdminNavItem active={adminTab === 'deposits'} onClick={() => setAdminTab('deposits')} icon={<ArrowDownCircle size={20} />} label="Deposits" badge={stats.pendingDeposits} />
-          <AdminNavItem active={adminTab === 'withdrawals'} onClick={() => setAdminTab('withdrawals')} icon={<ArrowUpCircle size={20} />} label="Withdrawals" badge={stats.pendingWithdrawals} />
-          <AdminNavItem active={adminTab === 'support'} onClick={() => setAdminTab('support')} icon={<MessageSquare size={20} />} label="Support" badge={stats.openTickets} />
-          <AdminNavItem active={adminTab === 'settings'} onClick={() => setAdminTab('settings')} icon={<Settings size={20} />} label="Settings" />
+        <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar">
+          <AdminNavItem active={adminTab === 'dashboard'} onClick={() => setAdminTab('dashboard')} icon={<LayoutDashboard size={22} />} label="Dashboard" />
+          <AdminNavItem active={adminTab === 'users'} onClick={() => setAdminTab('users')} icon={<Users size={22} />} label="Users" />
+          <AdminNavItem active={adminTab === 'tasks'} onClick={() => setAdminTab('tasks')} icon={<ClipboardList size={22} />} label="Tasks" />
+          <AdminNavItem active={adminTab === 'plans'} onClick={() => setAdminTab('plans')} icon={<Award size={22} />} label="Plans" />
+          <AdminNavItem active={adminTab === 'deposits'} onClick={() => setAdminTab('deposits')} icon={<ArrowDownCircle size={22} />} label="Deposits" badge={stats.pendingDeposits} />
+          <AdminNavItem active={adminTab === 'withdrawals'} onClick={() => setAdminTab('withdrawals')} icon={<ArrowUpCircle size={22} />} label="Withdrawals" badge={stats.pendingWithdrawals} />
+          <AdminNavItem active={adminTab === 'support'} onClick={() => setAdminTab('support')} icon={<MessageSquare size={22} />} label="Support" badge={stats.openTickets} />
+          <AdminNavItem active={adminTab === 'settings'} onClick={() => setAdminTab('settings')} icon={<Settings size={22} />} label="Settings" />
         </nav>
 
-        <button 
-          onClick={onLogout}
-          className="mt-auto flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
-        >
-          <LogOut size={20} />
-          <span className="font-medium">Logout</span>
-        </button>
+        <div className="p-6 border-t border-white/5">
+          <button 
+            onClick={onLogout}
+            className="w-full flex items-center gap-4 px-5 py-4 text-rose-400 hover:text-white hover:bg-rose-500/10 rounded-2xl transition-all group"
+          >
+            <LogOut size={22} className="group-hover:-translate-x-1 transition-transform" />
+            <span className="font-bold">Logout Admin</span>
+          </button>
+        </div>
       </aside>
 
       {/* Admin Content */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-        <header className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-bold text-slate-900 capitalize">{adminTab}</h2>
-          <div className="flex items-center gap-4">
+      <main className="flex-1 overflow-y-auto h-screen custom-scrollbar">
+        <header className="sticky top-0 z-30 bg-primary/80 backdrop-blur-xl border-b border-white/5 p-6 md:px-10 flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-white capitalize tracking-tight">{adminTab}</h2>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">Manage your platform operations</p>
+          </div>
+          <div className="flex items-center gap-5">
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold text-slate-900">Admin User</p>
-              <p className="text-xs text-slate-500">Super Administrator</p>
+              <p className="text-sm font-bold text-white">Administrator</p>
+              <p className="text-[10px] text-highlight font-bold uppercase tracking-widest">Online</p>
             </div>
-            <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold">A</div>
+            <div className="w-12 h-12 bg-accent rounded-2xl flex items-center justify-center font-bold text-white shadow-lg border border-white/5">A</div>
           </div>
         </header>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={adminTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {renderAdminTab()}
-          </motion.div>
-        </AnimatePresence>
+        <div className="p-6 md:p-10 max-w-7xl mx-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={adminTab}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
+              {renderAdminTab()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </main>
     </div>
   );
@@ -1533,14 +1712,16 @@ function AdminNavItem({ active, onClick, icon, label, badge }: any) {
   return (
     <button 
       onClick={onClick}
-      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'}`}
+      className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl transition-all duration-300 group ${active ? 'bg-highlight text-white shadow-xl shadow-highlight/20' : 'hover:bg-white/5 text-slate-400 hover:text-white'}`}
     >
-      <div className="flex items-center gap-3">
-        {icon}
-        <span className="font-medium">{label}</span>
+      <div className="flex items-center gap-4">
+        <div className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
+          {icon}
+        </div>
+        <span className="font-bold tracking-tight">{label}</span>
       </div>
       {badge > 0 && (
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-white text-indigo-600' : 'bg-indigo-600 text-white'}`}>
+        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg min-w-[24px] flex items-center justify-center ${active ? 'bg-white text-highlight' : 'bg-highlight text-white shadow-lg shadow-highlight/30'}`}>
           {badge}
         </span>
       )}
@@ -1551,22 +1732,22 @@ function AdminNavItem({ active, onClick, icon, label, badge }: any) {
 function AdminDashboard({ stats }: any) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <AdminStatCard icon={<Users className="text-blue-600" />} label="Total Users" value={stats.totalUsers} color="bg-blue-50" />
-      <AdminStatCard icon={<Wallet className="text-emerald-600" />} label="Total Balance" value={`৳${stats.totalBalance.toFixed(2)}`} color="bg-emerald-50" />
-      <AdminStatCard icon={<ArrowDownCircle className="text-amber-600" />} label="Pending Deposits" value={stats.pendingDeposits} color="bg-amber-50" />
-      <AdminStatCard icon={<ArrowUpCircle className="text-rose-600" />} label="Pending Withdrawals" value={stats.pendingWithdrawals} color="bg-rose-50" />
+      <AdminStatCard icon={<Users size={28} />} label="Total Users" value={stats.totalUsers} color="text-blue-400" bg="bg-blue-400/10" />
+      <AdminStatCard icon={<Wallet size={28} />} label="Total Balance" value={`৳${stats.totalBalance.toFixed(2)}`} color="text-emerald-400" bg="bg-emerald-400/10" />
+      <AdminStatCard icon={<ArrowDownCircle size={28} />} label="Pending Deposits" value={stats.pendingDeposits} color="text-amber-400" bg="bg-amber-400/10" />
+      <AdminStatCard icon={<ArrowUpCircle size={28} />} label="Pending Withdrawals" value={stats.pendingWithdrawals} color="text-rose-400" bg="bg-rose-400/10" />
     </div>
   );
 }
 
-function AdminStatCard({ icon, label, value, color }: any) {
+function AdminStatCard({ icon, label, value, color, bg }: any) {
   return (
-    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-      <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center mb-4`}>
+    <div className="glass-card p-8 group hover:border-white/10 transition-all duration-500">
+      <div className={`w-16 h-16 ${bg} ${color} rounded-[24px] flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 transition-transform duration-500`}>
         {icon}
       </div>
-      <p className="text-sm font-medium text-slate-500 mb-1">{label}</p>
-      <p className="text-2xl font-bold text-slate-900">{value}</p>
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">{label}</p>
+      <p className="text-3xl font-bold text-white tracking-tight">{value}</p>
     </div>
   );
 }
@@ -1588,55 +1769,58 @@ function AdminUsers({ users, setUsers, impersonateUser }: any) {
   };
 
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-      <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+    <div className="glass-card overflow-hidden">
+      <div className="p-8 border-b border-white/5 flex flex-col sm:flex-row justify-between gap-6 items-center">
+        <div className="relative w-full max-w-md group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-highlight transition-colors" size={20} />
           <input 
             type="text" 
-            placeholder="Search users..." 
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="Search users by name or phone..." 
+            className="w-full pl-12 pr-6 py-4 bg-primary/50 border border-white/5 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total: {filteredUsers.length}</span>
+        </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold tracking-wider">
+          <thead className="bg-white/5 text-slate-400 text-[10px] uppercase font-bold tracking-[0.2em]">
             <tr>
-              <th className="px-6 py-4">User</th>
-              <th className="px-6 py-4">Balance</th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4">Actions</th>
+              <th className="px-8 py-5">User Profile</th>
+              <th className="px-8 py-5">Balance</th>
+              <th className="px-8 py-5">Status</th>
+              <th className="px-8 py-5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-white/5">
             {filteredUsers.map((u: any) => (
-              <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-xs">
+              <tr key={u.id} className="hover:bg-white/5 transition-colors group">
+                <td className="px-8 py-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-accent rounded-2xl flex items-center justify-center font-bold text-white shadow-lg group-hover:scale-110 transition-transform">
                       {u.username[0].toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-bold text-slate-900 text-sm">{u.username}</p>
-                      <p className="text-xs text-slate-500">{u.phone}</p>
+                      <p className="font-bold text-white text-lg tracking-tight">{u.username}</p>
+                      <p className="text-xs text-slate-500 font-medium">{u.phone}</p>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 font-bold text-slate-900">৳{u.balance.toFixed(2)}</td>
-                <td className="px-6 py-4">
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${u.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                <td className="px-8 py-6 font-bold text-white text-lg tracking-tight">৳{u.balance.toFixed(2)}</td>
+                <td className="px-8 py-6">
+                  <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${u.status === 'active' ? 'bg-emerald-400/10 text-emerald-400' : 'bg-rose-400/10 text-rose-400'}`}>
                     {u.status}
                   </span>
                 </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => impersonateUser(u.id)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Login as user"><Eye size={18} /></button>
-                    <button onClick={() => adjustBalance(u.id, 100)} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors" title="Add 100"><Plus size={18} /></button>
-                    <button onClick={() => toggleBan(u.id)} className={`p-2 transition-colors ${u.status === 'active' ? 'text-slate-400 hover:text-rose-600' : 'text-rose-600 hover:text-emerald-600'}`} title={u.status === 'active' ? 'Ban' : 'Unban'}>
-                      {u.status === 'active' ? <XCircle size={18} /> : <CheckCircle2 size={18} />}
+                <td className="px-8 py-6">
+                  <div className="flex items-center justify-end gap-3">
+                    <button onClick={() => impersonateUser(u.id)} className="w-10 h-10 bg-white/5 text-slate-400 hover:text-white hover:bg-highlight rounded-xl flex items-center justify-center transition-all" title="Login as user"><Eye size={20} /></button>
+                    <button onClick={() => adjustBalance(u.id, 100)} className="w-10 h-10 bg-white/5 text-slate-400 hover:text-white hover:bg-emerald-500 rounded-xl flex items-center justify-center transition-all" title="Add 100"><Plus size={20} /></button>
+                    <button onClick={() => toggleBan(u.id)} className={`w-10 h-10 bg-white/5 flex items-center justify-center rounded-xl transition-all ${u.status === 'active' ? 'text-slate-400 hover:text-white hover:bg-rose-500' : 'text-rose-400 hover:text-white hover:bg-emerald-500'}`} title={u.status === 'active' ? 'Ban' : 'Unban'}>
+                      {u.status === 'active' ? <XCircle size={20} /> : <CheckCircle2 size={20} />}
                     </button>
                   </div>
                 </td>
@@ -1677,51 +1861,73 @@ function AdminTasks({ tasks, setTasks }: any) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-bold text-slate-900">Manage Tasks</h3>
-        <button onClick={() => setShowAdd(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2">
-          <Plus size={18} /> Add Task
+        <h3 className="text-xl font-bold text-white tracking-tight">Manage Tasks</h3>
+        <button onClick={() => setShowAdd(true)} className="btn-gradient px-6 py-3 text-sm flex items-center gap-2">
+          <Plus size={20} /> Add New Task
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tasks.map((task: any) => (
-          <div key={task.id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative group">
-            <button onClick={() => deleteTask(task.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-600 transition-colors">
-              <XCircle size={20} />
+          <div key={task.id} className="glass-card p-8 group relative overflow-hidden">
+            <button 
+              onClick={() => deleteTask(task.id)} 
+              className="absolute top-6 right-6 text-slate-600 hover:text-rose-500 transition-colors"
+            >
+              <XCircle size={24} />
             </button>
-            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
-              <ClipboardList size={24} />
+            <div className="w-16 h-16 bg-highlight/10 text-highlight rounded-2xl flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 transition-transform">
+              <ClipboardList size={32} />
             </div>
-            <h4 className="font-bold text-slate-900 mb-1">{task.title}</h4>
-            <p className="text-xs text-slate-500 mb-4">{task.description}</p>
-            <div className="flex justify-between items-center pt-4 border-t border-slate-50">
-              <span className="text-lg font-bold text-indigo-600">৳{task.amount}</span>
-              <span className="text-xs font-medium text-slate-400">{task.timeRequired}s • {task.category}</span>
+            <h4 className="font-bold text-white text-xl mb-2 tracking-tight">{task.title}</h4>
+            <p className="text-sm text-slate-500 mb-8 font-medium line-clamp-2">{task.description}</p>
+            <div className="flex justify-between items-center pt-6 border-t border-white/5">
+              <span className="text-2xl font-bold text-highlight tracking-tight">৳{task.amount}</span>
+              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{task.timeRequired}s • {task.category}</span>
             </div>
           </div>
         ))}
       </div>
 
       {showAdd && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl">
-            <h3 className="text-xl font-bold text-slate-900 mb-6">Add New Task</h3>
-            <form onSubmit={addTask} className="space-y-4">
-              <input type="text" placeholder="Title" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} required />
-              <input type="text" placeholder="Description" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})} required />
-              <div className="grid grid-cols-2 gap-4">
-                <input type="number" placeholder="Amount (৳)" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={newTask.amount} onChange={e => setNewTask({...newTask, amount: e.target.value})} required />
-                <input type="number" placeholder="Time (s)" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={newTask.time} onChange={e => setNewTask({...newTask, time: e.target.value})} required />
+        <div className="fixed inset-0 bg-primary/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="glass-card w-full max-w-lg p-10 relative border-t-4 border-t-highlight"
+          >
+            <h3 className="text-2xl font-bold text-white mb-8 tracking-tight">Add New Task</h3>
+            <form onSubmit={addTask} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Task Title</label>
+                <input type="text" placeholder="Enter task title" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} required />
               </div>
-              <input type="text" placeholder="Link" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={newTask.link} onChange={e => setNewTask({...newTask, link: e.target.value})} required />
-              <div className="flex gap-4">
-                <button type="submit" className="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-xl">Save Task</button>
-                <button type="button" onClick={() => setShowAdd(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cancel</button>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Description</label>
+                <input type="text" placeholder="Brief description" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})} required />
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Reward (৳)</label>
+                  <input type="number" placeholder="0.00" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newTask.amount} onChange={e => setNewTask({...newTask, amount: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Time (Seconds)</label>
+                  <input type="number" placeholder="30" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newTask.time} onChange={e => setNewTask({...newTask, time: e.target.value})} required />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Target Link</label>
+                <input type="text" placeholder="https://..." className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newTask.link} onChange={e => setNewTask({...newTask, link: e.target.value})} required />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <button type="submit" className="flex-1 btn-gradient py-4.5">Save Task</button>
+                <button type="button" onClick={() => setShowAdd(false)} className="flex-1 bg-white/5 text-white font-bold py-4.5 rounded-2xl hover:bg-white/10 transition-all">Cancel</button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
     </div>
@@ -1743,38 +1949,40 @@ function AdminDeposits({ transactions, setTransactions, setUsers }: any) {
   };
 
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="glass-card overflow-hidden">
+      <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold tracking-wider">
+          <thead className="bg-white/5 text-slate-400 text-[10px] uppercase font-bold tracking-[0.2em]">
             <tr>
-              <th className="px-6 py-4">User ID</th>
-              <th className="px-6 py-4">Amount</th>
-              <th className="px-6 py-4">Method</th>
-              <th className="px-6 py-4">TrxID</th>
-              <th className="px-6 py-4">Sender</th>
-              <th className="px-6 py-4">Actions</th>
+              <th className="px-8 py-5">User ID</th>
+              <th className="px-8 py-5">Amount</th>
+              <th className="px-8 py-5">Method</th>
+              <th className="px-8 py-5">TrxID</th>
+              <th className="px-8 py-5">Sender</th>
+              <th className="px-8 py-5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-white/5">
             {pendingDeposits.map((d: any) => (
-              <tr key={d.id}>
-                <td className="px-6 py-4 text-sm font-medium text-slate-900">{d.userId}</td>
-                <td className="px-6 py-4 text-sm font-bold text-emerald-600">৳{d.amount}</td>
-                <td className="px-6 py-4 text-sm text-slate-500">{d.method}</td>
-                <td className="px-6 py-4 text-sm font-mono text-slate-500">{d.trxId}</td>
-                <td className="px-6 py-4 text-sm text-slate-500">{d.accountNumber}</td>
-                <td className="px-6 py-4">
-                  <div className="flex gap-2">
-                    <button onClick={() => handleAction(d.id, 'approved')} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"><CheckCircle2 size={18} /></button>
-                    <button onClick={() => handleAction(d.id, 'rejected')} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><XCircle size={18} /></button>
+              <tr key={d.id} className="hover:bg-white/5 transition-colors group">
+                <td className="px-8 py-6 text-sm font-bold text-white">{d.userId}</td>
+                <td className="px-8 py-6 text-lg font-bold text-emerald-400">৳{d.amount}</td>
+                <td className="px-8 py-6">
+                  <span className="px-3 py-1 bg-white/5 rounded-lg text-xs font-bold text-slate-400">{d.method}</span>
+                </td>
+                <td className="px-8 py-6 text-sm font-mono text-slate-500">{d.trxId}</td>
+                <td className="px-8 py-6 text-sm text-slate-500 font-medium">{d.accountNumber}</td>
+                <td className="px-8 py-6">
+                  <div className="flex justify-end gap-3">
+                    <button onClick={() => handleAction(d.id, 'approved')} className="w-10 h-10 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-emerald-500/10"><CheckCircle2 size={20} /></button>
+                    <button onClick={() => handleAction(d.id, 'rejected')} className="w-10 h-10 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-rose-500/10"><XCircle size={20} /></button>
                   </div>
                 </td>
               </tr>
             ))}
             {pendingDeposits.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No pending deposits</td>
+                <td colSpan={6} className="px-8 py-20 text-center text-slate-500 italic font-medium">No pending deposit requests found</td>
               </tr>
             )}
           </tbody>
@@ -1801,36 +2009,38 @@ function AdminWithdrawals({ transactions, setTransactions, setUsers }: any) {
   };
 
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="glass-card overflow-hidden">
+      <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold tracking-wider">
+          <thead className="bg-white/5 text-slate-400 text-[10px] uppercase font-bold tracking-[0.2em]">
             <tr>
-              <th className="px-6 py-4">User ID</th>
-              <th className="px-6 py-4">Amount</th>
-              <th className="px-6 py-4">Method</th>
-              <th className="px-6 py-4">Account</th>
-              <th className="px-6 py-4">Actions</th>
+              <th className="px-8 py-5">User ID</th>
+              <th className="px-8 py-5">Amount</th>
+              <th className="px-8 py-5">Method</th>
+              <th className="px-8 py-5">Account</th>
+              <th className="px-8 py-5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-white/5">
             {pendingWithdrawals.map((w: any) => (
-              <tr key={w.id}>
-                <td className="px-6 py-4 text-sm font-medium text-slate-900">{w.userId}</td>
-                <td className="px-6 py-4 text-sm font-bold text-rose-600">৳{w.amount}</td>
-                <td className="px-6 py-4 text-sm text-slate-500">{w.method}</td>
-                <td className="px-6 py-4 text-sm text-slate-500">{w.accountNumber}</td>
-                <td className="px-6 py-4">
-                  <div className="flex gap-2">
-                    <button onClick={() => handleAction(w.id, 'approved')} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"><CheckCircle2 size={18} /></button>
-                    <button onClick={() => handleAction(w.id, 'rejected')} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><XCircle size={18} /></button>
+              <tr key={w.id} className="hover:bg-white/5 transition-colors group">
+                <td className="px-8 py-6 text-sm font-bold text-white">{w.userId}</td>
+                <td className="px-8 py-6 text-lg font-bold text-rose-400">৳{w.amount}</td>
+                <td className="px-8 py-6">
+                  <span className="px-3 py-1 bg-white/5 rounded-lg text-xs font-bold text-slate-400">{w.method}</span>
+                </td>
+                <td className="px-8 py-6 text-sm text-slate-500 font-medium">{w.accountNumber}</td>
+                <td className="px-8 py-6">
+                  <div className="flex justify-end gap-3">
+                    <button onClick={() => handleAction(w.id, 'approved')} className="w-10 h-10 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-emerald-500/10"><CheckCircle2 size={20} /></button>
+                    <button onClick={() => handleAction(w.id, 'rejected')} className="w-10 h-10 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-rose-500/10"><XCircle size={20} /></button>
                   </div>
                 </td>
               </tr>
             ))}
             {pendingWithdrawals.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">No pending withdrawals</td>
+                <td colSpan={5} className="px-8 py-20 text-center text-slate-500 italic font-medium">No pending withdrawal requests found</td>
               </tr>
             )}
           </tbody>
@@ -1842,34 +2052,34 @@ function AdminWithdrawals({ transactions, setTransactions, setUsers }: any) {
 
 function AdminSettings({ settings, setSettings }: any) {
   return (
-    <div className="max-w-2xl bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">bKash Number</label>
-          <input type="text" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={settings.bkashNumber} onChange={e => setSettings({...settings, bkashNumber: e.target.value})} />
+    <div className="max-w-3xl glass-card p-10 space-y-10 border-t-4 border-t-highlight">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">bKash Number</label>
+          <input type="text" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.bkashNumber} onChange={e => setSettings({...settings, bkashNumber: e.target.value})} />
         </div>
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nagad Number</label>
-          <input type="text" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={settings.nagadNumber} onChange={e => setSettings({...settings, nagadNumber: e.target.value})} />
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Nagad Number</label>
+          <input type="text" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.nagadNumber} onChange={e => setSettings({...settings, nagadNumber: e.target.value})} />
         </div>
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Min Withdrawal (৳)</label>
-          <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={settings.minWithdrawal} onChange={e => setSettings({...settings, minWithdrawal: Number(e.target.value)})} />
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Min Withdrawal (৳)</label>
+          <input type="number" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.minWithdrawal} onChange={e => setSettings({...settings, minWithdrawal: Number(e.target.value)})} />
         </div>
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Max Withdrawal/Day (৳)</label>
-          <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4" value={settings.maxWithdrawalPerDay} onChange={e => setSettings({...settings, maxWithdrawalPerDay: Number(e.target.value)})} />
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Max Withdrawal/Day (৳)</label>
+          <input type="number" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.maxWithdrawalPerDay} onChange={e => setSettings({...settings, maxWithdrawalPerDay: Number(e.target.value)})} />
         </div>
       </div>
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Website Notice</label>
-        <textarea className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 h-24 resize-none" value={settings.websiteNotice} onChange={e => setSettings({...settings, websiteNotice: e.target.value})} />
+      <div className="space-y-3">
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Website Notice</label>
+        <textarea className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white h-32 resize-none focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.websiteNotice} onChange={e => setSettings({...settings, websiteNotice: e.target.value})} />
       </div>
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Deposit Instructions</label>
-        <textarea className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 h-24 resize-none" value={settings.depositInstructions} onChange={e => setSettings({...settings, depositInstructions: e.target.value})} />
+      <div className="space-y-3">
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Deposit Instructions</label>
+        <textarea className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white h-32 resize-none focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.depositInstructions} onChange={e => setSettings({...settings, depositInstructions: e.target.value})} />
       </div>
-      <button onClick={() => alert('Settings saved!')} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-indigo-100">Save All Settings</button>
+      <button onClick={() => alert('Settings saved successfully!')} className="w-full btn-gradient py-5 text-lg shadow-2xl shadow-highlight/20">Save All Configuration</button>
     </div>
   );
 }
@@ -1905,56 +2115,67 @@ function AdminSupport({ tickets, setTickets }: any) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {tickets.map((ticket: any) => (
-        <div key={ticket.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg mr-2">{ticket.category}</span>
-              <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg ${ticket.status === 'open' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>{ticket.status}</span>
-              <h4 className="font-bold text-slate-900 mt-2">{ticket.subject}</h4>
-              <p className="text-xs text-slate-500">User ID: {ticket.userId}</p>
+        <div key={ticket.id} className="glass-card p-8 border-t-2 border-t-highlight/30">
+          <div className="flex justify-between items-start mb-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-highlight bg-highlight/10 px-3 py-1 rounded-lg">{ticket.category}</span>
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-lg ${ticket.status === 'open' ? 'bg-amber-400/10 text-amber-400' : 'bg-emerald-400/10 text-emerald-400'}`}>{ticket.status}</span>
+              </div>
+              <h4 className="font-bold text-white text-xl tracking-tight">{ticket.subject}</h4>
+              <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">User ID: {ticket.userId}</p>
             </div>
             <button 
               onClick={() => setActiveTicketId(activeTicketId === ticket.id ? null : ticket.id)}
-              className="text-indigo-600 text-sm font-bold hover:underline"
+              className="text-highlight text-sm font-bold hover:underline transition-all"
             >
-              {activeTicketId === ticket.id ? 'Cancel' : 'Reply'}
+              {activeTicketId === ticket.id ? 'Cancel Reply' : 'Reply to Ticket'}
             </button>
           </div>
-          <p className="text-sm text-slate-600 mb-6 bg-slate-50 p-4 rounded-2xl italic">"{ticket.message}"</p>
+          
+          <div className="bg-primary/50 p-6 rounded-2xl mb-8 border border-white/5 italic text-slate-400 text-sm leading-relaxed">
+            "{ticket.message}"
+          </div>
 
           {ticket.replies.length > 0 && (
-            <div className="space-y-3 mb-6 border-l-2 border-slate-100 pl-4">
+            <div className="space-y-4 mb-8 border-l-2 border-white/5 pl-6">
               {ticket.replies.map((reply: any) => (
-                <div key={reply.id} className="text-xs">
-                  <p className="font-bold text-slate-900 mb-1">{reply.senderId === 'bot' ? 'AI Bot' : reply.isAdmin ? 'Admin' : 'User'}</p>
-                  <p className="text-slate-600">{reply.message}</p>
+                <div key={reply.id} className="space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                    {reply.senderId === 'bot' ? 'AI Assistant' : reply.isAdmin ? 'Administrator' : 'User'}
+                  </p>
+                  <p className="text-sm text-slate-300 leading-relaxed">{reply.message}</p>
                 </div>
               ))}
             </div>
           )}
 
           {activeTicketId === ticket.id && (
-            <div className="flex gap-2">
+            <div className="flex gap-4">
               <input 
                 type="text" 
-                placeholder="Type your reply..." 
-                className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Type your official response..." 
+                className="flex-1 bg-primary/50 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
               />
               <button 
                 onClick={() => handleReply(ticket.id)}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold"
+                className="btn-gradient px-8 py-4 text-sm"
               >
-                Send
+                Send Reply
               </button>
             </div>
           )}
         </div>
       ))}
-      {tickets.length === 0 && <div className="text-center py-12 text-slate-400 italic">No support tickets</div>}
+      {tickets.length === 0 && (
+        <div className="glass-card py-20 text-center text-slate-500 italic font-medium">
+          No support tickets currently require attention
+        </div>
+      )}
     </div>
   );
 }
@@ -1979,39 +2200,88 @@ function AdminPlans({ plans, setPlans }: any) {
     setNewPlan({ name: '', price: '', dailyTasks: '', dailyEarning: '', validity: '' });
   };
 
+  const deletePlan = (id: string) => {
+    if (confirm('Are you sure? This might affect users with this plan.')) {
+      setPlans(plans.filter((p: any) => p.id !== id));
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
-        <button onClick={() => setShowAdd(!showAdd)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2">
-          <Plus size={18} /> Add New Plan
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <h3 className="text-xl font-bold text-white tracking-tight">Investment Plans</h3>
+        <button onClick={() => setShowAdd(!showAdd)} className="btn-gradient px-6 py-3 text-sm flex items-center gap-2">
+          <Plus size={20} /> {showAdd ? 'Cancel' : 'Create New Plan'}
         </button>
       </div>
 
       {showAdd && (
-        <form onSubmit={addPlan} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          <input type="text" placeholder="Plan Name" className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2" value={newPlan.name} onChange={e => setNewPlan({...newPlan, name: e.target.value})} required />
-          <input type="number" placeholder="Price" className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2" value={newPlan.price} onChange={e => setNewPlan({...newPlan, price: e.target.value})} required />
-          <input type="number" placeholder="Daily Tasks" className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2" value={newPlan.dailyTasks} onChange={e => setNewPlan({...newPlan, dailyTasks: e.target.value})} required />
-          <input type="number" placeholder="Daily Earning" className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2" value={newPlan.dailyEarning} onChange={e => setNewPlan({...newPlan, dailyEarning: e.target.value})} required />
-          <input type="number" placeholder="Validity (Days)" className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2" value={newPlan.validity} onChange={e => setNewPlan({...newPlan, validity: e.target.value})} required />
-          <button type="submit" className="bg-indigo-600 text-white font-bold rounded-xl py-2">Save Plan</button>
-        </form>
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-10 border-t-4 border-t-highlight"
+        >
+          <form onSubmit={addPlan} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Plan Name</label>
+              <input type="text" placeholder="e.g. Gold Plan" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newPlan.name} onChange={e => setNewPlan({...newPlan, name: e.target.value})} required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Price (৳)</label>
+              <input type="number" placeholder="500" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newPlan.price} onChange={e => setNewPlan({...newPlan, price: e.target.value})} required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Daily Tasks</label>
+              <input type="number" placeholder="5" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newPlan.dailyTasks} onChange={e => setNewPlan({...newPlan, dailyTasks: e.target.value})} required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Daily Earning (৳)</label>
+              <input type="number" placeholder="50" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newPlan.dailyEarning} onChange={e => setNewPlan({...newPlan, dailyEarning: e.target.value})} required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Validity (Days)</label>
+              <input type="number" placeholder="30" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={newPlan.validity} onChange={e => setNewPlan({...newPlan, validity: e.target.value})} required />
+            </div>
+            <div className="flex items-end">
+              <button type="submit" className="w-full btn-gradient py-4.5">Save Plan</button>
+            </div>
+          </form>
+        </motion.div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {plans.map((plan: any) => (
-          <div key={plan.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <div className="flex justify-between items-start mb-4">
-              <h4 className="font-bold text-slate-900">{plan.name}</h4>
-              <button onClick={() => setPlans(plans.map((p: any) => p.id === plan.id ? { ...p, active: !p.active } : p))} className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${plan.active ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+          <div key={plan.id} className="glass-card p-8 group relative overflow-hidden border-t-4 border-t-highlight/50">
+            <button 
+              onClick={() => deletePlan(plan.id)} 
+              className="absolute top-6 right-6 text-slate-600 hover:text-rose-500 transition-colors"
+            >
+              <XCircle size={24} />
+            </button>
+            <div className="w-16 h-16 bg-highlight/10 text-highlight rounded-2xl flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 transition-transform">
+              <Award size={32} />
+            </div>
+            <div className="flex justify-between items-start mb-2">
+              <h4 className="font-bold text-white text-2xl tracking-tight">{plan.name}</h4>
+              <button onClick={() => setPlans(plans.map((p: any) => p.id === plan.id ? { ...p, active: !p.active } : p))} className={`text-[10px] font-bold uppercase px-3 py-1 rounded-lg tracking-widest ${plan.active ? 'bg-emerald-400/10 text-emerald-400' : 'bg-rose-400/10 text-rose-400'}`}>
                 {plan.active ? 'Active' : 'Inactive'}
               </button>
             </div>
-            <p className="text-2xl font-bold text-indigo-600 mb-4">৳{plan.price}</p>
-            <div className="space-y-2 text-sm text-slate-500">
-              <p>Daily Tasks: {plan.dailyTasks}</p>
-              <p>Daily Earning: ৳{plan.dailyEarning}</p>
-              <p>Validity: {plan.validityDays} Days</p>
+            <p className="text-3xl font-bold text-highlight mb-6 tracking-tight">৳{plan.price}</p>
+            
+            <div className="space-y-4 pt-6 border-t border-white/5">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Daily Tasks</span>
+                <span className="text-sm font-bold text-white">{plan.dailyTasks} Tasks</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Daily Earning</span>
+                <span className="text-sm font-bold text-emerald-400">৳{plan.dailyEarning}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Validity</span>
+                <span className="text-sm font-bold text-white">{plan.validityDays} Days</span>
+              </div>
             </div>
           </div>
         ))}
