@@ -26,7 +26,8 @@ import {
   Home,
   Award,
   AlertTriangle,
-  RefreshCcw
+  RefreshCcw,
+  History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -51,6 +52,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   websiteNotice: "Welcome to ERNIG EARN! Complete tasks and earn money daily.",
   minWithdrawal: 100,
   maxWithdrawalPerDay: 5000,
+  minDeposit: 200,
+  maxDeposit: 25000,
   bkashNumber: "01700000000",
   nagadNumber: "01800000000",
   depositInstructions: "Send money to our bKash/Nagad number and provide the Transaction ID.",
@@ -153,8 +156,12 @@ export default function App() {
             if (!impersonator) {
               setView(userData.isAdmin ? 'admin' : 'dashboard');
             }
+            setLoading(false);
+          } else {
+            // If user exists in Auth but not in DB, they might be in the middle of registration
+            // We wait for the DB record to be created.
+            // To avoid infinite loading, we can add a timeout or check if we are registering.
           }
-          setLoading(false);
         });
       } else {
         setCurrentUser(null);
@@ -260,7 +267,7 @@ export default function App() {
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPassword === 'ernig2026') {
+    if (adminPassword === (settings.adminPassword || 'ernig2026')) {
       // Always allow view change if password is correct
       setView('admin');
       setShowAdminLogin(false);
@@ -287,7 +294,6 @@ export default function App() {
   };
 
   // --- Render Helpers ---
-  // --- Render Helpers ---
   if (loading) {
     return (
       <div className="min-h-screen bg-primary flex items-center justify-center">
@@ -299,7 +305,34 @@ export default function App() {
     );
   }
 
-  if (view === 'admin' && currentUser?.isAdmin) {
+  if (currentUser?.status === 'banned' && !currentUser?.isAdmin) {
+    return (
+      <div className="min-h-screen bg-primary flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="glass-card p-10 max-w-md border-t-4 border-t-rose-500 text-center"
+        >
+          <div className="w-20 h-20 bg-rose-500/10 text-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle size={40} />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-4 font-bangla">আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h1>
+          <p className="text-slate-400 mb-8 leading-relaxed">
+            আপনি আমাদের প্ল্যাটফর্মের কোনো নিয়ম ভঙ্গ করেছেন। যদি মনে করেন এটি ভুলবশত হয়েছে, তবে দয়া করে সাপোর্টে যোগাযোগ করুন।
+          </p>
+          <button 
+            onClick={handleLogout}
+            className="w-full py-4 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl transition-all shadow-lg shadow-rose-500/20"
+          >
+            লগ আউট করুন
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Admin View takes priority if explicitly set
+  if (view === 'admin') {
     return (
       <AdminPanel 
         users={users} 
@@ -320,6 +353,7 @@ export default function App() {
     );
   }
 
+  // Maintenance Mode
   if (settings.maintenanceMode && !currentUser?.isAdmin) {
     return (
       <div className="min-h-screen bg-primary">
@@ -329,23 +363,13 @@ export default function App() {
     );
   }
 
-  if (!currentUser && view === 'auth') {
+  // Auth View
+  if (!currentUser) {
     return (
       <div className="min-h-screen bg-primary">
         <Header onAdminClick={() => setShowAdminLogin(true)} />
         <AuthScreen mode={authMode} setMode={setAuthMode} onLogin={handleLogin} onRegister={handleRegister} />
         {showAdminLogin && <AdminLoginModal password={adminPassword} setPassword={setAdminPassword} onSubmit={handleAdminLogin} onClose={() => setShowAdminLogin(false)} />}
-      </div>
-    );
-  }
-
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-primary flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCcw className="text-highlight animate-spin" size={48} />
-          <p className="text-slate-400 font-bold tracking-widest">AUTHENTICATING...</p>
-        </div>
       </div>
     );
   }
@@ -468,12 +492,12 @@ function Header({ onAdminClick, user }: { onAdminClick: () => void, user?: User 
         {user && (
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-white">{user.username}</p>
-              <p className="text-[10px] text-emerald-400 font-bold">৳{user.balance.toFixed(2)}</p>
+              <p className="text-xs font-bold text-white">{user.username || 'User'}</p>
+              <p className="text-[10px] text-emerald-400 font-bold">৳{(user.balance || 0).toFixed(2)}</p>
             </div>
             <div className="w-10 h-10 rounded-full border-2 border-highlight p-0.5">
               <div className="w-full h-full bg-accent rounded-full flex items-center justify-center text-white font-bold text-sm">
-                {user.username[0].toUpperCase()}
+                {(user.username?.[0] || 'U').toUpperCase()}
               </div>
             </div>
           </div>
@@ -706,13 +730,13 @@ function UserDashboard({
 
   const renderTab = () => {
     switch (activeTab) {
-      case 'home': return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} setActiveTab={setActiveTab} />;
+      case 'home': return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} setActiveTab={setActiveTab} transactions={transactions} />;
       case 'tasks': return <TasksTab user={user} setUsers={setUsers} tasks={tasks} transactions={transactions} setTransactions={setTransactions} settings={settings} plans={plans} />;
       case 'plans': return <PlansTab user={user} setUsers={setUsers} plans={plans} transactions={transactions} setTransactions={setTransactions} settings={settings} />;
       case 'history': return <HistoryTab user={user} transactions={transactions} settings={settings} />;
       case 'profile': return <ProfileTab user={user} onLogout={onLogout} settings={settings} />;
       case 'support': return <SupportTab user={user} tickets={tickets} setTickets={setTickets} settings={settings} />;
-      default: return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} />;
+      default: return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} transactions={transactions} />;
     }
   };
 
@@ -769,8 +793,12 @@ function NavItem({ active, onClick, icon, label }: any) {
   );
 }
 
-function HomeTab({ user, stats, onDeposit, onWithdraw, settings, setActiveTab }: any) {
+function HomeTab({ user, stats, onDeposit, onWithdraw, settings, setActiveTab, transactions }: any) {
   const [showBalance, setShowBalance] = useState(true);
+
+  const isUserActive = useMemo(() => {
+    return transactions.some((t: any) => t.userId === user.id && t.type === 'deposit' && t.status === 'approved');
+  }, [user.id, transactions]);
 
   return (
     <div className="space-y-6">
@@ -785,8 +813,10 @@ function HomeTab({ user, stats, onDeposit, onWithdraw, settings, setActiveTab }:
         <div className="relative z-10">
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-white/70 text-xs font-bold uppercase tracking-widest font-bangla">বর্তমান ব্যালেন্স</span>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${isUserActive ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span className="text-white/70 text-xs font-bold uppercase tracking-widest font-bangla">
+                {isUserActive ? 'অ্যাকাউন্ট একটিভ' : 'অ্যাকাউন্ট ইন-একটিভ'}
+              </span>
             </div>
             <button onClick={() => setShowBalance(!showBalance)} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all backdrop-blur-md">
               {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
@@ -827,7 +857,7 @@ function HomeTab({ user, stats, onDeposit, onWithdraw, settings, setActiveTab }:
           </div>
           <div>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-bangla">মোট উপার্জন</p>
-            <p className="text-xl font-bold text-white tracking-tight">৳{stats.totalEarned.toFixed(2)}</p>
+            <p className="text-xl font-bold text-white tracking-tight">৳{(stats.totalEarned || 0).toFixed(2)}</p>
           </div>
         </div>
         <div className="glass-card p-5 flex items-center gap-4">
@@ -836,7 +866,7 @@ function HomeTab({ user, stats, onDeposit, onWithdraw, settings, setActiveTab }:
           </div>
           <div>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-bangla">মোট উত্তোলন</p>
-            <p className="text-xl font-bold text-white tracking-tight">৳{stats.totalWithdrawn.toFixed(2)}</p>
+            <p className="text-xl font-bold text-white tracking-tight">৳{(stats.totalWithdrawn || 0).toFixed(2)}</p>
           </div>
         </div>
       </div>
@@ -1255,6 +1285,9 @@ function HistoryTab({ user, transactions, settings }: any) {
             }`}>
               {t.status}
             </span>
+            {t.status === 'rejected' && t.rejectionReason && (
+              <p className="text-[10px] text-rose-400 mt-1 font-medium italic">Reason: {t.rejectionReason}</p>
+            )}
           </div>
         </div>
       )) : (
@@ -1267,127 +1300,130 @@ function HistoryTab({ user, transactions, settings }: any) {
 }
 
 function SupportTab({ user, tickets, setTickets, settings }: any) {
-  const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
 
   const userTickets = tickets.filter((t: any) => t.userId === user.id);
+  const activeTicket = userTickets.find((t: any) => t.id === activeTicketId) || userTickets[0];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const getAIResponse = (userMsg: string) => {
+    const msg = userMsg.toLowerCase();
+    if (msg.includes('ডিপোজিট') || msg.includes('deposit')) return 'ডিপোজিট করতে "Home" ট্যাব থেকে "Deposit" বাটনে ক্লিক করুন। বিকাশ বা নগদ সিলেক্ট করে টাকা পাঠিয়ে ট্রানজেকশন আইডি দিন।';
+    if (msg.includes('উত্তোলন') || msg.includes('withdraw')) return 'উত্তোলন করতে আপনার ব্যালেন্স কমপক্ষে ৳' + settings.minWithdrawal + ' হতে হবে। "Withdraw" বাটনে ক্লিক করে রিকোয়েস্ট দিন।';
+    if (msg.includes('কাজ') || msg.includes('task')) return 'কাজ করতে "কাজ" (Tasks) ট্যাবে যান। সেখানে ভিডিও দেখে বা লিংকে ক্লিক করে ইনকাম করতে পারবেন।';
+    if (msg.includes('রেফার') || msg.includes('refer')) return 'আপনার প্রোফাইল থেকে রেফার লিংক কপি করে বন্ধুদের শেয়ার করুন। ৩ লেভেল পর্যন্ত কমিশন পাবেন।';
+    return 'আপনার মেসেজটি আমাদের কাছে পৌঁছেছে। একজন এডমিন শীঘ্রই আপনার সাথে সরাসরি কথা বলবেন। ততক্ষণ আমাদের ওয়েবসাইট ঘুরে দেখুন।';
+  };
+
+  const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    const newTicket: SupportTicket = {
-      id: Math.random().toString(36).substr(2, 9),
-      userId: user.id,
-      subject,
-      category: 'General',
-      message,
-      status: 'open',
+    if (!message.trim()) return;
+
+    let currentTicket = activeTicket;
+    let newTickets = [...tickets];
+
+    if (!currentTicket) {
+      currentTicket = {
+        id: Math.random().toString(36).substr(2, 9),
+        userId: user.id,
+        subject: 'Direct Support',
+        category: 'General',
+        message: message,
+        status: 'open',
+        createdAt: Date.now(),
+        replies: []
+      };
+      newTickets.push(currentTicket);
+      setActiveTicketId(currentTicket.id);
+    }
+
+    const userReply = {
+      id: Date.now().toString(),
+      senderId: user.id,
+      message: message,
       createdAt: Date.now(),
-      replies: []
+      isAdmin: false
     };
 
-    const botReply = {
-      id: Date.now().toString(),
+    const updatedTicket = {
+      ...currentTicket,
+      replies: [...currentTicket.replies, userReply]
+    };
+
+    // AI logic
+    const aiReply = {
+      id: (Date.now() + 1).toString(),
       senderId: 'bot',
-      message: 'আমাদের সাপোর্ট টিমে মেসেজ দেয়ার জন্য ধন্যবাদ। একজন এডমিন শীঘ্রই আপনার সাথে যোগাযোগ করবেন।',
+      message: getAIResponse(message),
       createdAt: Date.now() + 1000,
       isAdmin: true
     };
-    newTicket.replies.push(botReply);
+    updatedTicket.replies.push(aiReply);
 
-    setTickets([...tickets, newTicket]);
-    setSubject('');
+    setTickets(newTickets.map((t: any) => t.id === updatedTicket.id ? updatedTicket : t));
     setMessage('');
-    setShowForm(false);
-    alert('সাপোর্ট টিকিট জমা দেওয়া হয়েছে!');
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-xl font-bold text-white font-bangla">সাপোর্ট টিকেট</h3>
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          className="btn-accent px-5 py-2.5 text-sm font-bangla"
-        >
-          {showForm ? 'বন্ধ করুন' : 'নতুন টিকেট'}
-        </button>
+    <div className="flex flex-col h-[calc(100vh-180px)] glass-card overflow-hidden">
+      <div className="p-6 border-b border-white/5 bg-secondary/50 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-highlight/10 rounded-2xl flex items-center justify-center text-highlight shadow-lg">
+            <MessageSquare size={24} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-white font-bangla">সরাসরি সাপোর্ট</h3>
+            <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">AI & Admin Online</p>
+          </div>
+        </div>
       </div>
 
-      {showForm && (
-        <motion.form 
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          onSubmit={handleSubmit} 
-          className="glass-card p-8 space-y-5 border-l-4 border-l-highlight"
-        >
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest font-bangla">বিষয়</label>
-            <input 
-              type="text" 
-              placeholder="আপনার সমস্যার বিষয় লিখুন" 
-              className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest font-bangla">বিস্তারিত</label>
-            <textarea 
-              placeholder="আপনার সমস্যা বিস্তারিত লিখুন" 
-              className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-5 h-40 resize-none text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit" className="w-full btn-gradient py-4.5 font-bangla">
-            টিকিট জমা দিন
-          </button>
-        </motion.form>
-      )}
-
-      <div className="space-y-5">
-        {userTickets.length > 0 ? userTickets.map((ticket: any) => (
-          <div key={ticket.id} className="glass-card p-6 group hover:border-white/10 transition-all">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h4 className="font-bold text-white text-lg font-bangla">{ticket.subject}</h4>
-                <p className="text-[10px] text-slate-500 font-medium mt-1 uppercase tracking-widest">Ticket ID: #{ticket.id.toUpperCase()}</p>
-              </div>
-              <span className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full tracking-widest ${
-                ticket.status === 'open' ? 'bg-amber-400/10 text-amber-400' : 'bg-emerald-400/10 text-emerald-400'
-              }`}>
-                {ticket.status}
-              </span>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-primary/20">
+        {!activeTicket ? (
+          <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center text-slate-600">
+              <MessageSquare size={40} />
             </div>
-            <p className="text-sm text-slate-400 mb-6 leading-relaxed font-medium">"{ticket.message}"</p>
-            
-            {ticket.replies.length > 0 && (
-              <div className="space-y-4 pt-6 border-t border-white/5">
-                {ticket.replies.map((reply: any) => (
-                  <div key={reply.id} className={`flex ${reply.isAdmin ? 'justify-start' : 'justify-end'}`}>
-                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm shadow-xl ${
-                      reply.isAdmin ? 'bg-accent/50 text-slate-200 rounded-tl-none border border-white/5' : 'bg-highlight/10 text-white rounded-tr-none border border-highlight/20'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className={`w-1.5 h-1.5 rounded-full ${reply.senderId === 'bot' ? 'bg-violet-400' : reply.isAdmin ? 'bg-highlight' : 'bg-emerald-400'}`} />
-                        <p className="font-bold text-[10px] uppercase tracking-widest opacity-60">{reply.senderId === 'bot' ? 'AI Assistant' : reply.isAdmin ? 'Admin' : 'You'}</p>
-                      </div>
-                      <p className="font-medium leading-relaxed">{reply.message}</p>
-                    </div>
-                  </div>
-                ))}
+            <p className="text-slate-500 font-medium font-bangla">আপনার কোনো মেসেজ নেই। নিচে মেসেজ লিখে সাপোর্ট শুরু করুন।</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex justify-start">
+              <div className="max-w-[80%] bg-secondary/80 border border-white/5 p-4 rounded-2xl rounded-tl-none shadow-lg">
+                <p className="text-sm text-slate-300 leading-relaxed font-medium">"{activeTicket.message}"</p>
+                <p className="text-[8px] text-slate-500 mt-2 uppercase font-bold tracking-widest">Initial Message</p>
               </div>
-            )}
-          </div>
-        )) : (
-          <div className="glass-card py-20 text-center text-slate-500 italic text-sm font-medium">
-            No support tickets found. We're here to help!
-          </div>
+            </div>
+            {activeTicket.replies.map((reply: any) => (
+              <div key={reply.id} className={`flex ${reply.isAdmin ? 'justify-start' : 'justify-end'}`}>
+                <div className={`max-w-[80%] p-4 rounded-2xl shadow-lg ${
+                  reply.isAdmin 
+                    ? 'bg-accent/40 border border-white/5 rounded-tl-none' 
+                    : 'bg-highlight text-white rounded-tr-none'
+                }`}>
+                  <p className="text-sm leading-relaxed font-medium">{reply.message}</p>
+                  <p className={`text-[8px] mt-2 uppercase font-bold tracking-widest ${reply.isAdmin ? 'text-slate-500' : 'text-white/60'}`}>
+                    {reply.senderId === 'bot' ? 'AI Assistant' : reply.isAdmin ? 'Administrator' : 'You'}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </>
         )}
       </div>
+
+      <form onSubmit={handleSendMessage} className="p-6 bg-secondary/80 border-t border-white/5 flex gap-4">
+        <input 
+          type="text" 
+          placeholder="আপনার মেসেজ লিখুন..." 
+          className="flex-1 bg-primary/50 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all font-bangla"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+        />
+        <button type="submit" className="w-14 h-14 btn-gradient rounded-2xl flex items-center justify-center shadow-xl shadow-highlight/20 shrink-0">
+          <ChevronRight size={28} />
+        </button>
+      </form>
     </div>
   );
 }
@@ -1459,7 +1495,9 @@ function DepositModal({ user, settings, onClose, onSubmit }: any) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (Number(amount) < 100) return alert('Minimum deposit is ৳100');
+    const amt = Number(amount);
+    if (amt < settings.minDeposit) return alert(`সর্বনিম্ন ডিপোজিট ৳${settings.minDeposit}`);
+    if (amt > settings.maxDeposit) return alert(`সর্বোচ্চ ডিপোজিট ৳${settings.maxDeposit}`);
     
     const transaction: Transaction = {
       id: Math.random().toString(36).substr(2, 9),
@@ -1490,9 +1528,16 @@ function DepositModal({ user, settings, onClose, onSubmit }: any) {
           <button onClick={onClose} className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-slate-400 transition-all"><X size={24} /></button>
         </div>
 
-        <div className="bg-highlight/10 p-5 rounded-2xl mb-8 flex gap-4 border border-highlight/20">
-          <Bell className="text-highlight shrink-0" size={24} />
-          <p className="text-xs text-slate-300 leading-relaxed font-medium">{settings.depositInstructions}</p>
+        <div className="bg-highlight/10 p-5 rounded-2xl mb-8 flex flex-col gap-3 border border-highlight/20">
+          <div className="flex gap-4">
+            <Bell className="text-highlight shrink-0" size={24} />
+            <p className="text-xs text-slate-300 leading-relaxed font-medium font-bangla">
+              নিচের নম্বরে <span className="text-highlight font-bold">"Send Money"</span> করুন। টাকা পাঠানোর পর ট্রানজেকশন আইডি এবং আপনার নম্বরটি নিচে দিন।
+            </p>
+          </div>
+          <p className="text-[10px] text-highlight/70 font-bold uppercase tracking-widest pl-10">
+            {settings.depositInstructions}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -1570,7 +1615,8 @@ function WithdrawModal({ user, settings, onClose, onSubmit }: any) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (Number(amount) < settings.minWithdrawal) return alert(`Minimum withdrawal is ৳${settings.minWithdrawal}`);
-    if (Number(amount) > user.balance) return alert('Insufficient balance');
+    const totalToDeduct = Number(amount) + (settings.withdrawalFee || 0);
+    if (totalToDeduct > user.balance) return alert('Insufficient balance (including fee)');
     
     const transaction: Transaction = {
       id: Math.random().toString(36).substr(2, 9),
@@ -1603,6 +1649,9 @@ function WithdrawModal({ user, settings, onClose, onSubmit }: any) {
         <div className="bg-rose-500/10 p-6 rounded-3xl mb-8 text-center border border-rose-500/20 shadow-inner">
           <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-2">Available Balance</p>
           <p className="text-3xl font-bold text-white tracking-tight">৳{user.balance.toFixed(2)}</p>
+          {settings.withdrawalFee > 0 && (
+            <p className="text-[10px] text-rose-400 font-bold mt-2 uppercase tracking-widest">Fee: ৳{settings.withdrawalFee}</p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -1794,41 +1843,58 @@ function AdminPanel({
   const [adminTab, setAdminTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const updateSettings = (newSettings: AppSettings) => {
-    set(ref(db, 'settings'), newSettings);
+  const updateSettings = (newSettings: any) => {
+    const value = typeof newSettings === 'function' ? newSettings(settings) : newSettings;
+    set(ref(db, 'settings'), value);
   };
 
-  const updateUsers = (newUsers: User[]) => {
-    newUsers.forEach(u => set(ref(db, `users/${u.id}`), u));
+  const updateUsers = (newUsers: any) => {
+    const value = typeof newUsers === 'function' ? newUsers(users) : newUsers;
+    value.forEach((u: any) => set(ref(db, `users/${u.id}`), u));
   };
 
-  const updateTasks = (newTasks: Task[]) => {
-    const tasksObj = newTasks.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+  const updateTasks = (newTasks: any) => {
+    const value = typeof newTasks === 'function' ? newTasks(tasks) : newTasks;
+    const tasksObj = value.reduce((acc: any, t: any) => ({ ...acc, [t.id]: t }), {});
     set(ref(db, 'tasks'), tasksObj);
   };
 
-  const updatePlans = (newPlans: Plan[]) => {
-    const plansObj = newPlans.reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
+  const updatePlans = (newPlans: any) => {
+    const value = typeof newPlans === 'function' ? newPlans(plans) : newPlans;
+    const plansObj = value.reduce((acc: any, p: any) => ({ ...acc, [p.id]: p }), {});
     set(ref(db, 'plans'), plansObj);
   };
 
-  const updateTransactions = (newTransactions: Transaction[]) => {
-    const transObj = newTransactions.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+  const updateTransactions = (newTransactions: any) => {
+    const value = typeof newTransactions === 'function' ? newTransactions(transactions) : newTransactions;
+    const transObj = value.reduce((acc: any, t: any) => ({ ...acc, [t.id]: t }), {});
     set(ref(db, 'transactions'), transObj);
   };
 
-  const updateTickets = (newTickets: SupportTicket[]) => {
-    const ticketsObj = newTickets.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+  const updateTickets = (newTickets: any) => {
+    const value = typeof newTickets === 'function' ? newTickets(tickets) : newTickets;
+    const ticketsObj = value.reduce((acc: any, t: any) => ({ ...acc, [t.id]: t }), {});
     set(ref(db, 'tickets'), ticketsObj);
   };
 
-  const stats = useMemo(() => ({
-    totalUsers: users.length,
-    totalBalance: users.reduce((sum: number, u: any) => sum + u.balance, 0),
-    pendingDeposits: transactions.filter((t: any) => t.type === 'deposit' && t.status === 'pending').length,
-    pendingWithdrawals: transactions.filter((t: any) => t.type === 'withdrawal' && t.status === 'pending').length,
-    openTickets: tickets.filter((t: any) => t.status === 'open').length
-  }), [users, transactions, tickets]);
+  const stats = useMemo(() => {
+    const approvedDeposits = transactions.filter((t: any) => t.type === 'deposit' && t.status === 'approved');
+    const paidWithdrawals = transactions.filter((t: any) => t.type === 'withdrawal' && t.status === 'paid');
+    
+    return {
+      totalUsers: users.length,
+      activeUsers: users.filter((u: any) => transactions.some((t: any) => t.userId === u.id && t.type === 'deposit' && t.status === 'approved')).length,
+      inactiveUsers: users.filter((u: any) => !transactions.some((t: any) => t.userId === u.id && t.type === 'deposit' && t.status === 'approved')).length,
+      totalBalance: users.reduce((sum: number, u: any) => sum + (u.balance || 0), 0),
+      pendingDeposits: transactions.filter((t: any) => t.type === 'deposit' && t.status === 'pending').length,
+      pendingWithdrawals: transactions.filter((t: any) => t.type === 'withdrawal' && t.status === 'pending').length,
+      totalDeposits: approvedDeposits.length,
+      totalDepositAmount: approvedDeposits.reduce((sum: number, t: any) => sum + t.amount, 0),
+      totalWithdrawals: paidWithdrawals.length,
+      totalWithdrawalAmount: paidWithdrawals.reduce((sum: number, t: any) => sum + t.amount, 0),
+      openTickets: tickets.filter((t: any) => t.status === 'open').length
+    };
+  }, [users, transactions, tickets]);
 
   const renderAdminTab = () => {
     switch (adminTab) {
@@ -1965,9 +2031,18 @@ function AdminDashboard({ stats }: any) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
       <AdminStatCard icon={<Users size={28} />} label="Total Users" value={stats.totalUsers} color="text-blue-400" bg="bg-blue-400/10" />
-      <AdminStatCard icon={<Wallet size={28} />} label="Total Balance" value={`৳${stats.totalBalance.toFixed(2)}`} color="text-emerald-400" bg="bg-emerald-400/10" />
+      <AdminStatCard icon={<CheckCircle2 size={28} />} label="Active Users" value={stats.activeUsers} color="text-emerald-400" bg="bg-emerald-400/10" />
+      <AdminStatCard icon={<XCircle size={28} />} label="Inactive Users" value={stats.inactiveUsers} color="text-rose-400" bg="bg-rose-400/10" />
+      <AdminStatCard icon={<Wallet size={28} />} label="Total Balance" value={`৳${stats.totalBalance.toFixed(2)}`} color="text-violet-400" bg="bg-violet-400/10" />
+      
+      <AdminStatCard icon={<ArrowDownCircle size={28} />} label="Total Deposits" value={stats.totalDeposits} color="text-emerald-400" bg="bg-emerald-400/10" />
+      <AdminStatCard icon={<ArrowDownCircle size={28} />} label="Total Deposit Vol" value={`৳${stats.totalDepositAmount.toFixed(0)}`} color="text-emerald-500" bg="bg-emerald-500/10" />
+      <AdminStatCard icon={<ArrowUpCircle size={28} />} label="Total Withdrawals" value={stats.totalWithdrawals} color="text-rose-400" bg="bg-rose-400/10" />
+      <AdminStatCard icon={<ArrowUpCircle size={28} />} label="Total Withdraw Vol" value={`৳${stats.totalWithdrawalAmount.toFixed(0)}`} color="text-rose-500" bg="bg-rose-500/10" />
+
       <AdminStatCard icon={<ArrowDownCircle size={28} />} label="Pending Deposits" value={stats.pendingDeposits} color="text-amber-400" bg="bg-amber-400/10" />
-      <AdminStatCard icon={<ArrowUpCircle size={28} />} label="Pending Withdrawals" value={stats.pendingWithdrawals} color="text-rose-400" bg="bg-rose-400/10" />
+      <AdminStatCard icon={<ArrowUpCircle size={28} />} label="Pending Withdraws" value={stats.pendingWithdrawals} color="text-amber-500" bg="bg-amber-500/10" />
+      <AdminStatCard icon={<MessageSquare size={28} />} label="Open Tickets" value={stats.openTickets} color="text-sky-400" bg="bg-sky-400/10" />
     </div>
   );
 }
@@ -1993,11 +2068,21 @@ function AdminUsers({ users, setUsers, impersonateUser }: any) {
   );
 
   const toggleBan = (userId: string) => {
+    const userToBan = users.find((u: any) => u.id === userId);
+    if (userToBan?.isAdmin) {
+      alert("অ্যাডমিন অ্যাকাউন্ট ব্যান করা সম্ভব নয়!");
+      return;
+    }
     setUsers(users.map((u: any) => u.id === userId ? { ...u, status: u.status === 'active' ? 'banned' : 'active' } : u));
   };
 
   const adjustBalance = (userId: string, amount: number) => {
-    setUsers(users.map((u: any) => u.id === userId ? { ...u, balance: Math.max(0, u.balance + amount) } : u));
+    setUsers(users.map((u: any) => u.id === userId ? { ...u, balance: Math.max(0, (u.balance || 0) + amount) } : u));
+  };
+
+  const updatePassword = (userId: string, newPass: string) => {
+    if (!newPass) return;
+    setUsers(users.map((u: any) => u.id === userId ? { ...u, password: newPass } : u));
   };
 
   return (
@@ -2022,6 +2107,7 @@ function AdminUsers({ users, setUsers, impersonateUser }: any) {
           <thead className="bg-white/5 text-slate-400 text-[10px] uppercase font-bold tracking-[0.2em]">
             <tr>
               <th className="px-8 py-5">User Profile</th>
+              <th className="px-8 py-5">Password</th>
               <th className="px-8 py-5">Balance</th>
               <th className="px-8 py-5">Status</th>
               <th className="px-8 py-5 text-right">Actions</th>
@@ -2033,15 +2119,49 @@ function AdminUsers({ users, setUsers, impersonateUser }: any) {
                 <td className="px-8 py-6">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-accent rounded-2xl flex items-center justify-center font-bold text-white shadow-lg group-hover:scale-110 transition-transform">
-                      {u.username[0].toUpperCase()}
+                      {(u.username?.[0] || 'U').toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-bold text-white text-lg tracking-tight">{u.username}</p>
-                      <p className="text-xs text-slate-500 font-medium">{u.phone}</p>
+                      <p className="font-bold text-white text-lg tracking-tight">{u.username || 'Unknown'}</p>
+                      <p className="text-xs text-slate-500 font-medium">{u.phone || 'No Phone'}</p>
                     </div>
                   </div>
                 </td>
-                <td className="px-8 py-6 font-bold text-white text-lg tracking-tight">৳{u.balance.toFixed(2)}</td>
+                <td className="px-8 py-6">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="text" 
+                      defaultValue={u.password}
+                      onBlur={(e) => updatePassword(u.id, e.target.value)}
+                      className="bg-primary/30 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-slate-300 w-32 focus:ring-1 focus:ring-highlight/50 outline-none"
+                    />
+                  </div>
+                </td>
+                <td className="px-8 py-6">
+                  <div className="flex flex-col gap-2">
+                    <p className="font-bold text-white text-lg tracking-tight">৳{(u.balance || 0).toFixed(2)}</p>
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={() => {
+                          const amt = prompt('Enter amount to add:');
+                          if (amt) adjustBalance(u.id, Number(amt));
+                        }}
+                        className="text-[10px] font-bold text-emerald-400 hover:underline"
+                      >
+                        + Add
+                      </button>
+                      <button 
+                        onClick={() => {
+                          const amt = prompt('Enter amount to subtract:');
+                          if (amt) adjustBalance(u.id, -Number(amt));
+                        }}
+                        className="text-[10px] font-bold text-rose-400 hover:underline"
+                      >
+                        - Sub
+                      </button>
+                    </div>
+                  </div>
+                </td>
                 <td className="px-8 py-6">
                   <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${u.status === 'active' ? 'bg-emerald-400/10 text-emerald-400' : 'bg-rose-400/10 text-rose-400'}`}>
                     {u.status}
@@ -2186,10 +2306,15 @@ function AdminDeposits({ transactions, setTransactions, setUsers }: any) {
     const deposit = transactions.find((t: any) => t.id === id);
     if (!deposit) return;
 
-    setTransactions(transactions.map((t: any) => t.id === id ? { ...t, status } : t));
+    let reason = '';
+    if (status === 'rejected') {
+      reason = prompt('Enter rejection reason:') || 'Invalid transaction details';
+    }
+
+    setTransactions(transactions.map((t: any) => t.id === id ? { ...t, status, rejectionReason: reason } : t));
 
     if (status === 'approved') {
-      setUsers((prev: User[]) => prev.map(u => u.id === deposit.userId ? { ...u, balance: u.balance + deposit.amount } : u));
+      setUsers((prev: User[]) => prev.map(u => u.id === deposit.userId ? { ...u, balance: (u.balance || 0) + deposit.amount } : u));
     }
   };
 
@@ -2244,12 +2369,17 @@ function AdminWithdrawals({ transactions, setTransactions, setUsers }: any) {
     const withdrawal = transactions.find((t: any) => t.id === id);
     if (!withdrawal) return;
 
-    setTransactions(transactions.map((t: any) => t.id === id ? { ...t, status: status === 'approved' ? 'paid' : 'rejected' } : t));
+    let reason = '';
+    if (status === 'rejected') {
+      reason = prompt('Enter rejection reason:') || 'Invalid withdrawal details';
+    }
+
+    setTransactions(transactions.map((t: any) => t.id === id ? { ...t, status: status === 'approved' ? 'paid' : 'rejected', rejectionReason: reason } : t));
 
     if (status === 'rejected') {
-      setUsers((prev: User[]) => prev.map(u => u.id === withdrawal.userId ? { ...u, balance: u.balance + withdrawal.amount } : u));
+      setUsers((prev: User[]) => prev.map(u => u.id === withdrawal.userId ? { ...u, balance: (u.balance || 0) + withdrawal.amount } : u));
     } else {
-      setUsers((prev: User[]) => prev.map(u => u.id === withdrawal.userId ? { ...u, totalWithdrawals: u.totalWithdrawals + withdrawal.amount } : u));
+      setUsers((prev: User[]) => prev.map(u => u.id === withdrawal.userId ? { ...u, totalWithdrawals: (u.totalWithdrawals || 0) + withdrawal.amount } : u));
     }
   };
 
@@ -2327,6 +2457,22 @@ function AdminSettings({ settings, setSettings }: any) {
         <div className="space-y-3">
           <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Max Withdrawal/Day (৳)</label>
           <input type="number" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.maxWithdrawalPerDay} onChange={e => setSettings({...settings, maxWithdrawalPerDay: Number(e.target.value)})} />
+        </div>
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Min Deposit (৳)</label>
+          <input type="number" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.minDeposit} onChange={e => setSettings({...settings, minDeposit: Number(e.target.value)})} />
+        </div>
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Max Deposit (৳)</label>
+          <input type="number" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.maxDeposit} onChange={e => setSettings({...settings, maxDeposit: Number(e.target.value)})} />
+        </div>
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Withdrawal Fee (৳)</label>
+          <input type="number" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.withdrawalFee || 0} onChange={e => setSettings({...settings, withdrawalFee: Number(e.target.value)})} />
+        </div>
+        <div className="space-y-3 sm:col-span-2">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Admin Login Password</label>
+          <input type="text" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.adminPassword || 'admin123'} onChange={e => setSettings({...settings, adminPassword: e.target.value})} />
         </div>
       </div>
       <div className="space-y-3">

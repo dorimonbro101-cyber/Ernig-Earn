@@ -1,4 +1,4 @@
-export type UserStatus = 'active' | 'banned';
+export type UserStatus = 'active' | 'inactive' | 'banned';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'paid';
 export type TicketStatus = 'open' | 'in-progress' | 'resolved' | 'closed';
 export type TransactionType = 'deposit' | 'withdrawal' | 'task' | 'referral' | 'plan_purchase';
@@ -40,6 +40,7 @@ export interface Transaction {
   accountNumber?: string;
   trxId?: string;
   status: TransactionStatus;
+  rejectionReason?: string;
   createdAt: number;
   description: string;
 }
@@ -77,6 +78,8 @@ export interface AppSettings {
   websiteNotice: string;
   minWithdrawal: number;
   maxWithdrawalPerDay: number;
+  minDeposit: number;
+  maxDeposit: number;
   bkashNumber: string;
   nagadNumber: string;
   depositInstructions: string;
@@ -84,4 +87,6 @@ export interface AppSettings {
   referralBonuses: { level: number; amount: number; type: 'percentage' | 'fixed' }[];
   themeColor: string;
   maintenanceMode: boolean;
+  adminPassword?: string;
+  withdrawalFee?: number;
 }
