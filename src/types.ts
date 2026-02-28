@@ -1,7 +1,7 @@
 export type UserStatus = 'active' | 'inactive' | 'banned';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'paid';
 export type TicketStatus = 'open' | 'in-progress' | 'resolved' | 'closed';
-export type TransactionType = 'deposit' | 'withdrawal' | 'task' | 'referral' | 'plan_purchase';
+export type TransactionType = 'deposit' | 'withdrawal' | 'task' | 'referral' | 'plan_purchase' | 'spin';
 
 export interface User {
   id: string;
@@ -19,6 +19,7 @@ export interface User {
   isAdmin?: boolean;
   activePlanId?: string;
   planExpiry?: number;
+  lastSpinTime?: number;
 }
 
 export interface Plan {
@@ -89,4 +90,7 @@ export interface AppSettings {
   maintenanceMode: boolean;
   adminPassword?: string;
   withdrawalFee?: number;
+  spinRewards?: number[];
+  spinEnabled?: boolean;
+  maxSpinReward?: number;
 }

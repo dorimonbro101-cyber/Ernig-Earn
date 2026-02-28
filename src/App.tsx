@@ -66,7 +66,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     { level: 3, amount: 2, type: 'percentage' }
   ],
   themeColor: '#4F46E5', // Indigo 600
-  maintenanceMode: false
+  maintenanceMode: false,
+  spinRewards: [1, 2, 5, 10, 15, 20, 1, 2, 5, 10, 15, 20], // 12 default rewards
+  spinEnabled: true,
+  maxSpinReward: 20
 };
 
 // Initial Plans
@@ -781,6 +784,7 @@ function UserDashboard({
       case 'home': return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} setActiveTab={setActiveTab} transactions={transactions} />;
       case 'tasks': return <TasksTab user={user} updateUsers={updateUsers} tasks={tasks} transactions={transactions} updateTransactions={updateTransactions} settings={settings} plans={plans} />;
       case 'plans': return <PlansTab user={user} updateUsers={updateUsers} plans={plans} transactions={transactions} updateTransactions={updateTransactions} settings={settings} />;
+      case 'spin': return <SpinTab user={user} updateUsers={updateUsers} settings={settings} transactions={transactions} updateTransactions={updateTransactions} />;
       case 'history': return <HistoryTab user={user} transactions={transactions} settings={settings} />;
       case 'profile': return <ProfileTab user={user} onLogout={onLogout} settings={settings} />;
       case 'support': return <SupportTab user={user} tickets={tickets} setTickets={updateTickets} settings={settings} />;
@@ -823,6 +827,7 @@ function UserDashboard({
       <nav className="fixed bottom-0 left-0 right-0 bg-secondary/90 backdrop-blur-xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
         <NavItem active={activeTab === 'home'} onClick={() => setActiveTab('home')} icon={<Home size={22} />} label="হোম" />
         <NavItem active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<ClipboardList size={22} />} label="কাজ" />
+        <NavItem active={activeTab === 'spin'} onClick={() => setActiveTab('spin')} icon={<RefreshCcw size={22} />} label="স্পিন" />
         <NavItem active={activeTab === 'plans'} onClick={() => setActiveTab('plans')} icon={<Award size={22} />} label="প্ল্যান" />
         <NavItem active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={22} />} label="হিস্ট্রি" />
         <NavItem active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={<UserIcon size={22} />} label="প্রোফাইল" />
@@ -1252,6 +1257,214 @@ function PlansTab({ user, updateUsers, plans, transactions, updateTransactions, 
             </button>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function SpinTab({ user, updateUsers, settings, transactions, updateTransactions }: any) {
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [result, setResult] = useState<number | null>(null);
+  const [rotation, setRotation] = useState(0);
+  
+  // Use rewards from settings or fallback
+  const rewards = useMemo(() => {
+    const baseRewards = settings.spinRewards || [1, 2, 5, 10, 15, 20, 1, 2, 5, 10, 15, 20];
+    const max = settings.maxSpinReward || 20;
+    // Ensure no reward exceeds the max set in admin
+    return baseRewards.map(r => Math.min(r, max));
+  }, [settings.spinRewards, settings.maxSpinReward]);
+
+  const canSpin = useMemo(() => {
+    if (!settings.spinEnabled) return false;
+    if (!user.activePlanId) return false;
+    if (!user.lastSpinTime) return true;
+    const now = Date.now();
+    const lastSpin = user.lastSpinTime;
+    return now - lastSpin >= 24 * 60 * 60 * 1000;
+  }, [user, settings.spinEnabled]);
+
+  const timeLeft = useMemo(() => {
+    if (!user.lastSpinTime) return null;
+    const nextSpin = user.lastSpinTime + 24 * 60 * 60 * 1000;
+    const diff = nextSpin - Date.now();
+    if (diff <= 0) return null;
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+  }, [user.lastSpinTime]);
+
+  const handleSpin = () => {
+    if (!settings.spinEnabled) {
+      alert('দুঃখিত, বর্তমানে স্পিন অপশনটি বন্ধ আছে।');
+      return;
+    }
+
+    if (!user.activePlanId) {
+      alert('আপনি এখনো কোনো প্ল্যান কিনেননি! স্পিন করতে প্রথমে একটি প্ল্যান কিনুন।');
+      return;
+    }
+
+    if (!canSpin) {
+      alert(`পরবর্তী স্পিন করতে ${timeLeft} অপেক্ষা করুন।`);
+      return;
+    }
+
+    setIsSpinning(true);
+    setResult(null);
+
+    const randomIndex = Math.floor(Math.random() * 12);
+    const reward = rewards[randomIndex];
+    
+    // Calculate rotation to land on the prize
+    // Each segment is 30 degrees. 0 degrees is the first segment.
+    // The pointer is at the top (90 degrees relative to start if 0 is right, but our conic starts from 0 at top)
+    const extraRotation = 360 * 10 + (360 - (randomIndex * 30));
+    const newRotation = rotation + extraRotation;
+    setRotation(newRotation);
+
+    setTimeout(() => {
+      setIsSpinning(false);
+      setResult(reward);
+      
+      const transaction: Transaction = {
+        id: Math.random().toString(36).substr(2, 9),
+        userId: user.id,
+        amount: reward,
+        type: 'spin',
+        status: 'approved',
+        createdAt: Date.now(),
+        description: `Lucky Spin Reward: ৳${reward}`
+      };
+
+      updateTransactions([...transactions, transaction]);
+      updateUsers((prev: User[]) => prev.map((u: any) => u.id === user.id ? {
+        ...u,
+        balance: u.balance + reward,
+        totalEarnings: (u.totalEarnings || 0) + reward,
+        lastSpinTime: Date.now()
+      } : u));
+    }, 5000);
+  };
+
+  if (!settings.spinEnabled) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+        <div className="w-20 h-20 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center">
+          <RefreshCcw size={40} className="opacity-50" />
+        </div>
+        <h3 className="text-xl font-bold text-white font-bangla">স্পিন বর্তমানে বন্ধ আছে</h3>
+        <p className="text-slate-500 text-sm max-w-xs mx-auto">অ্যাডমিন কর্তৃক বর্তমানে স্পিন অপশনটি বন্ধ রাখা হয়েছে। অনুগ্রহ করে পরে চেষ্টা করুন।</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 flex flex-col items-center">
+      <div className="text-center">
+        <h3 className="text-2xl font-bold text-white font-bangla">লাকি স্পিন</h3>
+        <p className="text-slate-500 text-sm mt-2">প্রতিদিন একবার স্পিন করে জিতে নিন আকর্ষণীয় পুরস্কার</p>
+      </div>
+
+      <div className="relative w-72 h-72 md:w-80 md:h-80">
+        {/* Pointer/Cutter */}
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-30">
+          <div className="w-8 h-10 bg-rose-500 shadow-lg" style={{ clipPath: 'polygon(50% 100%, 0 0, 100% 0)' }} />
+          <div className="w-2 h-2 bg-white rounded-full absolute top-1 left-1/2 -translate-x-1/2" />
+        </div>
+
+        {/* Outer Ring */}
+        <div className="absolute inset-[-12px] rounded-full border-[12px] border-secondary/50 shadow-[0_0_50px_rgba(79,70,229,0.2)]" />
+
+        <motion.div 
+          animate={{ rotate: rotation }}
+          transition={{ duration: 5, ease: [0.15, 0, 0.15, 1] }}
+          className="w-full h-full rounded-full border-4 border-white/20 relative overflow-hidden shadow-2xl z-10"
+          style={{ 
+            background: 'conic-gradient(from -15deg, #4f46e5 0deg 30deg, #4338ca 30deg 60deg, #4f46e5 60deg 90deg, #4338ca 90deg 120deg, #4f46e5 120deg 150deg, #4338ca 150deg 180deg, #4f46e5 180deg 210deg, #4338ca 210deg 240deg, #4f46e5 240deg 270deg, #4338ca 270deg 300deg, #4f46e5 300deg 330deg, #4338ca 330deg 360deg)' 
+          }}
+        >
+          {rewards.map((reward: number, i: number) => (
+            <div 
+              key={i}
+              className="absolute top-0 left-1/2 -translate-x-1/2 h-1/2 origin-bottom flex flex-col items-center pt-6"
+              style={{ transform: `translateX(-50%) rotate(${i * 30}deg)` }}
+            >
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-white font-black text-sm tracking-tighter drop-shadow-md">৳{reward}</span>
+                <div className="w-1 h-1 bg-white/30 rounded-full" />
+              </div>
+            </div>
+          ))}
+          
+          {/* Center Hub */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white rounded-full shadow-[0_0_20px_rgba(0,0,0,0.5)] z-20 flex items-center justify-center border-4 border-secondary">
+            <div className="w-10 h-10 bg-highlight rounded-full flex items-center justify-center text-white">
+              <RefreshCcw size={20} className={isSpinning ? 'animate-spin' : ''} />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      <div className="w-full max-w-sm space-y-4">
+        <button 
+          onClick={handleSpin}
+          disabled={isSpinning || !canSpin}
+          className={`w-full py-5 rounded-2xl font-bold text-lg transition-all shadow-2xl font-bangla ${isSpinning || !canSpin ? 'bg-white/5 text-slate-600 cursor-not-allowed' : 'btn-gradient shadow-highlight/30 hover:scale-[1.02]'}`}
+        >
+          {isSpinning ? 'স্পিন হচ্ছে...' : !canSpin ? (timeLeft ? `অপেক্ষা করুন (${timeLeft})` : 'প্ল্যান প্রয়োজন') : 'স্পিন করুন'}
+        </button>
+
+        {result !== null && (
+          <motion.div 
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-3xl text-center shadow-xl"
+          >
+            <p className="text-emerald-400 font-bold text-lg font-bangla">অভিনন্দন!</p>
+            <p className="text-white text-3xl font-black mt-1 tracking-tight">আপনি জিতেছেন ৳{result}</p>
+            <p className="text-emerald-400/60 text-[10px] mt-2 uppercase font-bold tracking-widest">Added to your balance</p>
+          </motion.div>
+        )}
+      </div>
+
+      <div className="glass-card p-6 w-full max-w-sm">
+        <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2 font-bangla">
+          <History size={16} className="text-highlight" />
+          সাম্প্রতিক ফলাফল
+        </h4>
+        <div className="space-y-3 max-h-40 overflow-y-auto custom-scrollbar">
+          {transactions.filter((t: any) => t.type === 'spin').sort((a: any, b: any) => b.createdAt - a.createdAt).slice(0, 5).map((t: any) => (
+            <div key={t.id} className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-highlight/10 text-highlight rounded-full flex items-center justify-center">
+                  <UserIcon size={14} />
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest">You</p>
+                  <p className="text-[9px] text-slate-600">{new Date(t.createdAt).toLocaleTimeString()}</p>
+                </div>
+              </div>
+              <p className="text-sm font-bold text-emerald-400">৳{t.amount}</p>
+            </div>
+          ))}
+          {transactions.filter((t: any) => t.type === 'spin').length === 0 && (
+            <p className="text-center text-xs text-slate-600 italic py-4">কোনো ফলাফল পাওয়া যায়নি</p>
+          )}
+        </div>
+      </div>
+
+      <div className="glass-card p-6 w-full max-w-sm">
+        <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2 font-bangla">
+          <AlertTriangle size={16} className="text-amber-400" />
+          নিয়মাবলী
+        </h4>
+        <ul className="space-y-2 text-xs text-slate-400 list-disc pl-4 font-bangla">
+          <li>স্পিন করতে আপনার একটি সক্রিয় প্ল্যান থাকতে হবে।</li>
+          <li>প্রতি ২৪ ঘণ্টায় আপনি একবার স্পিন করতে পারবেন।</li>
+          <li>স্পিন থেকে প্রাপ্ত টাকা সরাসরি আপনার ব্যালেন্সে যোগ হবে।</li>
+        </ul>
       </div>
     </div>
   );
@@ -2531,6 +2744,51 @@ function AdminSettings({ settings, setSettings }: any) {
           <input type="text" className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.adminPassword || 'admin123'} onChange={e => setSettings({...settings, adminPassword: e.target.value})} />
         </div>
       </div>
+      <div className="space-y-6 glass-card p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-bold text-white font-bangla">লাকি স্পিন কন্ট্রোল</h4>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Enable/Disable Spin Feature</p>
+          </div>
+          <button 
+            onClick={() => setSettings({...settings, spinEnabled: !settings.spinEnabled})}
+            className={`w-14 h-8 rounded-full relative transition-all duration-300 ${settings.spinEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+          >
+            <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all duration-300 ${settings.spinEnabled ? 'left-7' : 'left-1'}`} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Max Spin Reward (৳)</label>
+          <input 
+            type="number" 
+            className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" 
+            value={settings.maxSpinReward || 20} 
+            onChange={e => setSettings({...settings, maxSpinReward: Number(e.target.value)})} 
+          />
+          <p className="text-[10px] text-amber-400 italic">ইউজাররা স্পিন করে এই এমাউন্টের বেশি পাবে না।</p>
+        </div>
+
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Lucky Spin Rewards (12 Values)</label>
+          <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
+            {(settings.spinRewards || [1, 2, 5, 10, 15, 20, 1, 2, 5, 10, 15, 20]).map((reward: number, i: number) => (
+              <input 
+                key={i}
+                type="number" 
+                className="w-full bg-primary/50 border border-white/5 rounded-xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all text-center"
+                value={reward}
+                onChange={e => {
+                  const newRewards = [...(settings.spinRewards || [1, 2, 5, 10, 15, 20, 1, 2, 5, 10, 15, 20])];
+                  newRewards[i] = Number(e.target.value);
+                  setSettings({...settings, spinRewards: newRewards});
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-3">
         <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Website Notice</label>
         <textarea className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white h-32 resize-none focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.websiteNotice} onChange={e => setSettings({...settings, websiteNotice: e.target.value})} />
@@ -2554,13 +2812,21 @@ function AdminSettings({ settings, setSettings }: any) {
 
 function AdminSupport({ tickets, setTickets }: any) {
   const [replyText, setReplyText] = useState('');
-  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const handleReply = (ticketId: string) => {
-    if (!replyText.trim()) return;
+  const activeTicket = tickets.find((t: any) => t.id === selectedTicketId);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activeTicket?.replies]);
+
+  const handleReply = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!replyText.trim() || !selectedTicketId) return;
     
     setTickets(tickets.map((t: any) => {
-      if (t.id === ticketId) {
+      if (t.id === selectedTicketId) {
         return {
           ...t,
           status: 'replied',
@@ -2579,76 +2845,124 @@ function AdminSupport({ tickets, setTickets }: any) {
       return t;
     }));
     setReplyText('');
-    setActiveTicketId(null);
   };
 
   return (
-    <div className="space-y-6">
-      {tickets.map((ticket: any) => (
-        <div key={ticket.id} className="glass-card overflow-hidden border-l-4 border-l-highlight">
-          <div className="p-6 md:p-8">
-            <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-highlight bg-highlight/10 px-2 py-0.5 rounded-md">{ticket.category}</span>
-                  <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${ticket.status === 'open' ? 'bg-amber-400/10 text-amber-400' : 'bg-emerald-400/10 text-emerald-400'}`}>{ticket.status}</span>
-                </div>
-                <h4 className="font-bold text-white text-lg tracking-tight">{ticket.subject}</h4>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">User: {ticket.userId}</p>
+    <div className="flex flex-col md:flex-row h-[calc(100vh-120px)] glass-card overflow-hidden border border-white/5">
+      {/* Sidebar: Ticket List */}
+      <div className={`w-full md:w-80 border-r border-white/5 bg-secondary/30 flex flex-col ${selectedTicketId ? 'hidden md:flex' : 'flex'}`}>
+        <div className="p-6 border-b border-white/5 bg-secondary/50">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <MessageSquare size={20} className="text-highlight" />
+            Support Inbox
+          </h3>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
+            {tickets.filter((t: any) => t.status === 'open').length} Active Conversations
+          </p>
+        </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {tickets.sort((a: any, b: any) => b.createdAt - a.createdAt).map((ticket: any) => (
+            <button
+              key={ticket.id}
+              onClick={() => setSelectedTicketId(ticket.id)}
+              className={`w-full p-5 text-left border-b border-white/5 transition-all hover:bg-white/5 flex flex-col gap-2 ${selectedTicketId === ticket.id ? 'bg-highlight/10 border-l-4 border-l-highlight' : ''}`}
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">User: {ticket.userId.slice(0, 8)}...</span>
+                <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${ticket.status === 'open' ? 'bg-amber-400/10 text-amber-400' : 'bg-emerald-400/10 text-emerald-400'}`}>
+                  {ticket.status}
+                </span>
               </div>
-              <button 
-                onClick={() => setActiveTicketId(activeTicketId === ticket.id ? null : ticket.id)}
-                className="btn-gradient px-4 py-2 text-xs"
-              >
-                {activeTicketId === ticket.id ? 'Cancel' : 'Reply'}
-              </button>
-            </div>
-            
-            <div className="bg-primary/30 p-5 rounded-2xl mb-6 border border-white/5 text-slate-300 text-sm leading-relaxed">
-              {ticket.message}
+              <p className="text-sm font-bold text-white truncate">{ticket.subject}</p>
+              <p className="text-xs text-slate-500 truncate italic">"{ticket.message}"</p>
+              <span className="text-[9px] text-slate-600 self-end">{new Date(ticket.createdAt).toLocaleTimeString()}</span>
+            </button>
+          ))}
+          {tickets.length === 0 && (
+            <div className="p-10 text-center text-slate-500 italic text-sm">No tickets found</div>
+          )}
+        </div>
+      </div>
+
+      {/* Chat Window */}
+      <div className={`flex-1 flex flex-col bg-primary/20 ${!selectedTicketId ? 'hidden md:flex items-center justify-center' : 'flex'}`}>
+        {activeTicket ? (
+          <>
+            {/* Chat Header */}
+            <div className="p-4 md:p-6 border-b border-white/5 bg-secondary/50 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button onClick={() => setSelectedTicketId(null)} className="md:hidden p-2 text-slate-400 hover:text-white">
+                  <ArrowUpCircle size={24} className="-rotate-90" />
+                </button>
+                <div>
+                  <h4 className="font-bold text-white text-lg tracking-tight">{activeTicket.subject}</h4>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">User ID: {activeTicket.userId}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-highlight bg-highlight/10 px-3 py-1 rounded-lg">{activeTicket.category}</span>
+              </div>
             </div>
 
-            {ticket.replies.length > 0 && (
-              <div className="space-y-4 pt-6 border-t border-white/5">
-                {ticket.replies.map((reply: any) => (
-                  <div key={reply.id} className={`flex ${reply.isAdmin ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm ${reply.isAdmin ? 'bg-highlight text-white rounded-tr-none' : 'bg-white/5 text-slate-300 rounded-tl-none border border-white/5'}`}>
-                      <p className="text-[9px] font-bold uppercase tracking-widest opacity-60 mb-1">
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-primary/10">
+              {/* Original Message */}
+              <div className="flex justify-start">
+                <div className="max-w-[85%] p-5 rounded-3xl bg-white/5 border border-white/5 text-slate-300 shadow-xl rounded-tl-none">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Original Inquiry</p>
+                  <p className="text-sm leading-relaxed">{activeTicket.message}</p>
+                  <p className="text-[9px] text-slate-600 mt-2 text-right">{new Date(activeTicket.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Replies */}
+              {activeTicket.replies.map((reply: any) => (
+                <div key={reply.id} className={`flex ${reply.isAdmin ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] p-5 rounded-3xl shadow-2xl ${reply.isAdmin ? 'bg-highlight text-white rounded-tr-none' : 'bg-secondary border border-white/5 text-slate-300 rounded-tl-none'}`}>
+                    <div className="flex justify-between items-center gap-4 mb-2">
+                      <p className="text-[9px] font-bold uppercase tracking-widest opacity-60">
                         {reply.senderId === 'bot' ? 'AI Assistant' : reply.isAdmin ? 'Admin' : 'User'}
                       </p>
-                      <p className="leading-relaxed">{reply.message}</p>
                     </div>
+                    <p className="text-sm leading-relaxed">{reply.message}</p>
+                    <p className={`text-[9px] mt-2 text-right ${reply.isAdmin ? 'text-white/60' : 'text-slate-600'}`}>{new Date(reply.createdAt).toLocaleTimeString()}</p>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
 
-            {activeTicketId === ticket.id && (
-              <div className="mt-6 flex gap-3">
+            {/* Chat Input */}
+            <div className="p-4 md:p-6 border-t border-white/5 bg-secondary/50">
+              <form onSubmit={handleReply} className="flex gap-3">
                 <input 
                   type="text" 
-                  placeholder="Type your message..." 
-                  className="flex-1 bg-primary/50 border border-white/5 rounded-xl px-5 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
+                  placeholder="Type your direct reply here..." 
+                  className="flex-1 bg-primary/50 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all shadow-inner"
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleReply(ticket.id)}
                 />
                 <button 
-                  onClick={() => handleReply(ticket.id)}
-                  className="w-12 h-12 bg-highlight text-white rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-lg shadow-highlight/20"
+                  type="submit"
+                  className="w-14 h-14 bg-highlight text-white rounded-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-highlight/30 group"
                 >
-                  <ArrowUpCircle size={24} />
+                  <ArrowUpCircle size={28} className="group-hover:-translate-y-1 transition-transform" />
                 </button>
-              </div>
-            )}
+              </form>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-center p-10 space-y-6">
+            <div className="w-24 h-24 bg-highlight/10 rounded-full flex items-center justify-center text-highlight animate-pulse">
+              <MessageSquare size={48} />
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-white mb-2">Select a Conversation</h3>
+              <p className="text-slate-500 max-w-xs mx-auto">Click on a ticket from the sidebar to start a direct chat with the user.</p>
+            </div>
           </div>
-        </div>
-      ))}
-      {tickets.length === 0 && (
-        <div className="glass-card py-20 text-center text-slate-500 italic font-medium">
-          No support tickets found
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
