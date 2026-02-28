@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   LayoutDashboard, 
   ClipboardList, 
@@ -27,7 +27,9 @@ import {
   Award,
   AlertTriangle,
   RefreshCcw,
-  History
+  History,
+  BarChart3,
+  TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -102,6 +104,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   // --- Firebase Sync ---
+  const impersonatorRef = useRef<User | null>(null);
+  useEffect(() => {
+    impersonatorRef.current = impersonator;
+  }, [impersonator]);
+
   useEffect(() => {
     const unsubSettings = onValue(ref(db, 'settings'), (snapshot) => {
       if (snapshot.exists()) setSettings(snapshot.val());
@@ -109,42 +116,26 @@ export default function App() {
     });
 
     const unsubUsers = onValue(ref(db, 'users'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setUsers(Object.values(data));
-      }
+      if (snapshot.exists()) setUsers(Object.values(snapshot.val()));
     });
 
     const unsubTasks = onValue(ref(db, 'tasks'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setTasks(Object.values(data));
-      } else {
-        INITIAL_TASKS.forEach(t => set(ref(db, `tasks/${t.id}`), t));
-      }
+      if (snapshot.exists()) setTasks(Object.values(snapshot.val()));
+      else INITIAL_TASKS.forEach(t => set(ref(db, `tasks/${t.id}`), t));
     });
 
     const unsubPlans = onValue(ref(db, 'plans'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setPlans(Object.values(data));
-      } else {
-        INITIAL_PLANS.forEach(p => set(ref(db, `plans/${p.id}`), p));
-      }
+      if (snapshot.exists()) setPlans(Object.values(snapshot.val()));
+      else INITIAL_PLANS.forEach(p => set(ref(db, `plans/${p.id}`), p));
     });
 
     const unsubTransactions = onValue(ref(db, 'transactions'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setTransactions(Object.values(data));
-      }
+      if (snapshot.exists()) setTransactions(Object.values(snapshot.val()));
+      else setTransactions([]);
     });
 
     const unsubTickets = onValue(ref(db, 'tickets'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setTickets(Object.values(data));
-      }
+      if (snapshot.exists()) setTickets(Object.values(snapshot.val()));
     });
 
     const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
@@ -152,20 +143,24 @@ export default function App() {
         onValue(ref(db, `users/${firebaseUser.uid}`), (snapshot) => {
           if (snapshot.exists()) {
             const userData = snapshot.val();
-            setCurrentUser(userData);
-            if (!impersonator) {
-              setView(userData.isAdmin ? 'admin' : 'dashboard');
+            if (!impersonatorRef.current) {
+              setCurrentUser(userData);
+              // Only auto-redirect to admin if they are at the auth screen
+              // and they are actually an admin. 
+              // We use a ref to track if they just logged out to prevent auto-login loops.
+              if (window.location.pathname === '/' && !sessionStorage.getItem('justLoggedOut')) {
+                // We don't force admin view here anymore to allow them to stay in dashboard if they want
+                // But if they are at 'auth' view, we take them to their default view
+              }
             }
             setLoading(false);
-          } else {
-            // If user exists in Auth but not in DB, they might be in the middle of registration
-            // We wait for the DB record to be created.
-            // To avoid infinite loading, we can add a timeout or check if we are registering.
           }
         });
       } else {
-        setCurrentUser(null);
-        setView('auth');
+        if (!impersonatorRef.current) {
+          setCurrentUser(null);
+          setView('auth');
+        }
         setLoading(false);
       }
     });
@@ -179,11 +174,62 @@ export default function App() {
       unsubTickets();
       unsubAuth();
     };
-  }, [impersonator]);
+  }, []); // Remove view dependency
 
   useEffect(() => {
     setTheme(settings.themeColor);
   }, [settings.themeColor]);
+
+  // --- Data Update Helpers (Firebase Sync) ---
+  const updateSettings = (newSettings: any) => {
+    const value = typeof newSettings === 'function' ? newSettings(settings) : newSettings;
+    set(ref(db, 'settings'), value);
+  };
+
+  const updateUsers = (newUsers: any) => {
+    const value = typeof newUsers === 'function' ? newUsers(users) : newUsers;
+    const updates: any = {};
+    value.forEach((u: any) => {
+      updates[u.id] = u;
+    });
+    update(ref(db, 'users'), updates);
+  };
+
+  const updateTransactions = (newTransactions: any) => {
+    const value = typeof newTransactions === 'function' ? newTransactions(transactions) : newTransactions;
+    const updates: any = {};
+    value.forEach((t: any) => {
+      updates[t.id] = t;
+    });
+    update(ref(db, 'transactions'), updates);
+  };
+
+  const updateTickets = (newTickets: any) => {
+    const value = typeof newTickets === 'function' ? newTickets(tickets) : newTickets;
+    const updates: any = {};
+    value.forEach((t: any) => {
+      updates[t.id] = t;
+    });
+    update(ref(db, 'tickets'), updates);
+  };
+
+  const updateTasks = (newTasks: any) => {
+    const value = typeof newTasks === 'function' ? newTasks(tasks) : newTasks;
+    const updates: any = {};
+    value.forEach((t: any) => {
+      updates[t.id] = t;
+    });
+    update(ref(db, 'tasks'), updates);
+  };
+
+  const updatePlans = (newPlans: any) => {
+    const value = typeof newPlans === 'function' ? newPlans(plans) : newPlans;
+    const updates: any = {};
+    value.forEach((p: any) => {
+      updates[p.id] = p;
+    });
+    update(ref(db, 'plans'), updates);
+  };
 
   // --- Auth Handlers ---
   const handleRegister = async (username: string, phone: string, pass: string, refCode?: string) => {
@@ -192,7 +238,7 @@ export default function App() {
       const usernameSnapshot = await get(ref(db, 'users'));
       if (usernameSnapshot.exists()) {
         const allUsers = Object.values(usernameSnapshot.val()) as User[];
-        if (allUsers.find(u => u.username === username)) {
+        if (allUsers.find(u => u.username.toLowerCase() === username.toLowerCase())) {
           alert('Username already exists');
           return;
         }
@@ -231,9 +277,17 @@ export default function App() {
 
   const handleLogin = async (username: string, pass: string) => {
     try {
+      sessionStorage.removeItem('justLoggedOut');
       const sanitizedUsername = username.toLowerCase().trim().replace(/\s+/g, '');
       const email = `${sanitizedUsername}@ernig.com`;
-      await signInWithEmailAndPassword(auth, email, pass);
+      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      
+      // Fetch user data to determine view
+      const snapshot = await get(ref(db, `users/${userCredential.user.uid}`));
+      if (snapshot.exists()) {
+        const userData = snapshot.val();
+        setView(userData.isAdmin ? 'admin' : 'dashboard');
+      }
     } catch (error: any) {
       if (error.code === 'auth/configuration-not-found') {
         alert('Firebase Error: Please enable "Email/Password" sign-in method in your Firebase Console.');
@@ -248,10 +302,19 @@ export default function App() {
       setCurrentUser(impersonator);
       setImpersonator(null);
       setView('admin');
-    } else {
-      await signOut(auth);
-      setView('auth');
+      return;
     }
+    
+    // If we are in admin view but we are a normal user who just entered the password
+    if (view === 'admin' && currentUser && !currentUser.isAdmin) {
+      setView('dashboard');
+      return;
+    }
+
+    sessionStorage.setItem('justLoggedOut', 'true');
+    await signOut(auth);
+    setCurrentUser(null);
+    setView('auth');
     setActiveTab('home');
   };
 
@@ -267,27 +330,12 @@ export default function App() {
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPassword === (settings.adminPassword || 'ernig2026')) {
-      // Always allow view change if password is correct
+    const correctPass = settings.adminPassword || 'ernig2026';
+    if (adminPassword === correctPass) {
       setView('admin');
       setShowAdminLogin(false);
       setAdminPassword('');
-
-      // Try to sync with Firebase in background
-      if (!currentUser?.isAdmin) {
-        try {
-          const sanitizedUsername = 'admin';
-          const email = `${sanitizedUsername}@ernig.com`;
-          await signInWithEmailAndPassword(auth, email, 'ernig2026');
-        } catch (error: any) {
-          // If login fails, try to register
-          try {
-            await handleRegister('admin', '0000000000', 'ernig2026');
-          } catch (regError: any) {
-            console.error('Admin background sync failed:', regError);
-          }
-        }
-      }
+      // No background login anymore to avoid session confusion
     } else {
       alert('Invalid Admin Password');
     }
@@ -336,18 +384,18 @@ export default function App() {
     return (
       <AdminPanel 
         users={users} 
-        setUsers={setUsers}
+        updateUsers={updateUsers}
         tasks={tasks}
-        setTasks={setTasks}
+        updateTasks={updateTasks}
         plans={plans}
-        setPlans={setPlans}
+        updatePlans={updatePlans}
         transactions={transactions}
-        setTransactions={setTransactions}
+        updateTransactions={updateTransactions}
         tickets={tickets}
-        setTickets={setTickets}
+        updateTickets={updateTickets}
         settings={settings}
-        setSettings={setSettings}
-        onLogout={() => setView(currentUser ? 'dashboard' : 'auth')}
+        updateSettings={updateSettings}
+        onLogout={handleLogout}
         impersonateUser={impersonateUser}
       />
     );
@@ -396,13 +444,13 @@ export default function App() {
         <UserDashboard 
           user={currentUser!} 
           users={users}
-          setUsers={setUsers}
+          updateUsers={updateUsers}
           tasks={tasks}
           plans={plans}
           transactions={transactions}
-          setTransactions={setTransactions}
+          updateTransactions={updateTransactions}
           tickets={tickets}
-          setTickets={setTickets}
+          updateTickets={updateTickets}
           settings={settings}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -702,13 +750,13 @@ function AuthScreen({ mode, setMode, onLogin, onRegister }: any) {
 function UserDashboard({ 
   user, 
   users,
-  setUsers,
+  updateUsers,
   tasks, 
   plans,
   transactions, 
-  setTransactions, 
+  updateTransactions, 
   tickets, 
-  setTickets, 
+  updateTickets, 
   settings, 
   activeTab, 
   setActiveTab, 
@@ -731,11 +779,11 @@ function UserDashboard({
   const renderTab = () => {
     switch (activeTab) {
       case 'home': return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} setActiveTab={setActiveTab} transactions={transactions} />;
-      case 'tasks': return <TasksTab user={user} setUsers={setUsers} tasks={tasks} transactions={transactions} setTransactions={setTransactions} settings={settings} plans={plans} />;
-      case 'plans': return <PlansTab user={user} setUsers={setUsers} plans={plans} transactions={transactions} setTransactions={setTransactions} settings={settings} />;
+      case 'tasks': return <TasksTab user={user} updateUsers={updateUsers} tasks={tasks} transactions={transactions} updateTransactions={updateTransactions} settings={settings} plans={plans} />;
+      case 'plans': return <PlansTab user={user} updateUsers={updateUsers} plans={plans} transactions={transactions} updateTransactions={updateTransactions} settings={settings} />;
       case 'history': return <HistoryTab user={user} transactions={transactions} settings={settings} />;
       case 'profile': return <ProfileTab user={user} onLogout={onLogout} settings={settings} />;
-      case 'support': return <SupportTab user={user} tickets={tickets} setTickets={setTickets} settings={settings} />;
+      case 'support': return <SupportTab user={user} tickets={tickets} setTickets={updateTickets} settings={settings} />;
       default: return <HomeTab user={user} stats={stats} onDeposit={() => setShowDeposit(true)} onWithdraw={() => setShowWithdraw(true)} settings={settings} transactions={transactions} />;
     }
   };
@@ -758,8 +806,8 @@ function UserDashboard({
       </main>
 
       {/* Modals */}
-      {showDeposit && <DepositModal user={user} settings={settings} onClose={() => setShowDeposit(false)} onSubmit={(t: any) => setTransactions([...transactions, t])} />}
-      {showWithdraw && <WithdrawModal user={user} settings={settings} onClose={() => setShowWithdraw(false)} onSubmit={(t: any) => setTransactions([...transactions, t])} />}
+      {showDeposit && <DepositModal user={user} settings={settings} onClose={() => setShowDeposit(false)} onSubmit={(t: any) => updateTransactions([...transactions, t])} />}
+      {showWithdraw && <WithdrawModal user={user} settings={settings} onClose={() => setShowWithdraw(false)} onSubmit={(t: any) => updateTransactions([...transactions, t])} />}
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-secondary/90 backdrop-blur-xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
@@ -1080,7 +1128,7 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
   );
 }
 
-function PlansTab({ user, setUsers, plans, transactions, setTransactions, settings }: any) {
+function PlansTab({ user, updateUsers, plans, transactions, updateTransactions, settings }: any) {
   const buyPlan = (plan: Plan) => {
     if (user.balance < plan.price) {
       alert('আপনার ব্যালেন্স পর্যাপ্ত নয়। অনুগ্রহ করে ডিপোজিট করুন।');
@@ -1098,9 +1146,9 @@ function PlansTab({ user, setUsers, plans, transactions, setTransactions, settin
         description: `Purchased Plan: ${plan.name}`
       };
 
-      setTransactions([...transactions, transaction]);
+      updateTransactions([...transactions, transaction]);
 
-      setUsers((prev: User[]) => prev.map(u => {
+      updateUsers((prev: User[]) => prev.map(u => {
         if (u.id === user.id) {
           return {
             ...u,
@@ -1560,9 +1608,22 @@ function DepositModal({ user, settings, onClose, onSubmit }: any) {
             </button>
           </div>
 
-          <div className="bg-primary/50 p-6 rounded-3xl text-center border border-white/5 shadow-inner">
+          <div className="bg-primary/50 p-6 rounded-3xl text-center border border-white/5 shadow-inner relative group/copy">
             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-2">Send Money To ({method})</p>
-            <p className="text-2xl font-mono font-bold text-highlight tracking-wider">{method === 'bKash' ? settings.bkashNumber : settings.nagadNumber}</p>
+            <div className="flex items-center justify-center gap-3">
+              <p className="text-2xl font-mono font-bold text-highlight tracking-wider">{method === 'bKash' ? settings.bkashNumber : settings.nagadNumber}</p>
+              <button 
+                type="button"
+                onClick={() => {
+                  const num = method === 'bKash' ? settings.bkashNumber : settings.nagadNumber;
+                  navigator.clipboard.writeText(num);
+                  alert('নম্বর কপি করা হয়েছে!');
+                }}
+                className="p-2 bg-highlight/10 text-highlight rounded-lg hover:bg-highlight hover:text-white transition-all"
+              >
+                <Copy size={16} />
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -1826,56 +1887,22 @@ function MaintenanceScreen({ onAdminClick }: { onAdminClick: () => void }) {
 
 function AdminPanel({ 
   users, 
-  setUsers, 
+  updateUsers, 
   tasks, 
-  setTasks, 
+  updateTasks, 
   plans,
-  setPlans,
+  updatePlans,
   transactions, 
-  setTransactions, 
+  updateTransactions, 
   tickets, 
-  setTickets, 
+  updateTickets, 
   settings, 
-  setSettings, 
+  updateSettings, 
   onLogout, 
   impersonateUser 
 }: any) {
   const [adminTab, setAdminTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const updateSettings = (newSettings: any) => {
-    const value = typeof newSettings === 'function' ? newSettings(settings) : newSettings;
-    set(ref(db, 'settings'), value);
-  };
-
-  const updateUsers = (newUsers: any) => {
-    const value = typeof newUsers === 'function' ? newUsers(users) : newUsers;
-    value.forEach((u: any) => set(ref(db, `users/${u.id}`), u));
-  };
-
-  const updateTasks = (newTasks: any) => {
-    const value = typeof newTasks === 'function' ? newTasks(tasks) : newTasks;
-    const tasksObj = value.reduce((acc: any, t: any) => ({ ...acc, [t.id]: t }), {});
-    set(ref(db, 'tasks'), tasksObj);
-  };
-
-  const updatePlans = (newPlans: any) => {
-    const value = typeof newPlans === 'function' ? newPlans(plans) : newPlans;
-    const plansObj = value.reduce((acc: any, p: any) => ({ ...acc, [p.id]: p }), {});
-    set(ref(db, 'plans'), plansObj);
-  };
-
-  const updateTransactions = (newTransactions: any) => {
-    const value = typeof newTransactions === 'function' ? newTransactions(transactions) : newTransactions;
-    const transObj = value.reduce((acc: any, t: any) => ({ ...acc, [t.id]: t }), {});
-    set(ref(db, 'transactions'), transObj);
-  };
-
-  const updateTickets = (newTickets: any) => {
-    const value = typeof newTickets === 'function' ? newTickets(tickets) : newTickets;
-    const ticketsObj = value.reduce((acc: any, t: any) => ({ ...acc, [t.id]: t }), {});
-    set(ref(db, 'tickets'), ticketsObj);
-  };
 
   const stats = useMemo(() => {
     const approvedDeposits = transactions.filter((t: any) => t.type === 'deposit' && t.status === 'approved');
@@ -2035,13 +2062,11 @@ function AdminDashboard({ stats }: any) {
       <AdminStatCard icon={<XCircle size={28} />} label="Inactive Users" value={stats.inactiveUsers} color="text-rose-400" bg="bg-rose-400/10" />
       <AdminStatCard icon={<Wallet size={28} />} label="Total Balance" value={`৳${stats.totalBalance.toFixed(2)}`} color="text-violet-400" bg="bg-violet-400/10" />
       
-      <AdminStatCard icon={<ArrowDownCircle size={28} />} label="Total Deposits" value={stats.totalDeposits} color="text-emerald-400" bg="bg-emerald-400/10" />
-      <AdminStatCard icon={<ArrowDownCircle size={28} />} label="Total Deposit Vol" value={`৳${stats.totalDepositAmount.toFixed(0)}`} color="text-emerald-500" bg="bg-emerald-500/10" />
-      <AdminStatCard icon={<ArrowUpCircle size={28} />} label="Total Withdrawals" value={stats.totalWithdrawals} color="text-rose-400" bg="bg-rose-400/10" />
-      <AdminStatCard icon={<ArrowUpCircle size={28} />} label="Total Withdraw Vol" value={`৳${stats.totalWithdrawalAmount.toFixed(0)}`} color="text-rose-500" bg="bg-rose-500/10" />
-
-      <AdminStatCard icon={<ArrowDownCircle size={28} />} label="Pending Deposits" value={stats.pendingDeposits} color="text-amber-400" bg="bg-amber-400/10" />
-      <AdminStatCard icon={<ArrowUpCircle size={28} />} label="Pending Withdraws" value={stats.pendingWithdrawals} color="text-amber-500" bg="bg-amber-500/10" />
+      <AdminStatCard icon={<BarChart3 size={28} />} label="Deposit Volume" value={`৳${stats.totalDepositAmount.toFixed(0)}`} color="text-emerald-500" bg="bg-emerald-500/10" />
+      <AdminStatCard icon={<TrendingUp size={28} />} label="Withdraw Volume" value={`৳${stats.totalWithdrawalAmount.toFixed(0)}`} color="text-rose-500" bg="bg-rose-500/10" />
+      <AdminStatCard icon={<Clock size={28} />} label="Pending Deposits" value={stats.pendingDeposits} color="text-amber-400" bg="bg-amber-400/10" />
+      <AdminStatCard icon={<History size={28} />} label="Pending Withdraws" value={stats.pendingWithdrawals} color="text-amber-500" bg="bg-amber-500/10" />
+      
       <AdminStatCard icon={<MessageSquare size={28} />} label="Open Tickets" value={stats.openTickets} color="text-sky-400" bg="bg-sky-400/10" />
     </div>
   );
@@ -2483,7 +2508,15 @@ function AdminSettings({ settings, setSettings }: any) {
         <label className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Deposit Instructions</label>
         <textarea className="w-full bg-primary/50 border border-white/5 rounded-2xl py-4 px-6 text-white h-32 resize-none focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all" value={settings.depositInstructions} onChange={e => setSettings({...settings, depositInstructions: e.target.value})} />
       </div>
-      <button onClick={() => alert('Settings saved successfully!')} className="w-full btn-gradient py-5 text-lg shadow-2xl shadow-highlight/20">Save All Configuration</button>
+      <button 
+        onClick={() => {
+          setSettings(settings);
+          alert('Settings saved successfully!');
+        }} 
+        className="w-full btn-gradient py-5 text-lg shadow-2xl shadow-highlight/20"
+      >
+        Save All Configuration
+      </button>
     </div>
   );
 }
