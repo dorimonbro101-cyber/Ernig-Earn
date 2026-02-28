@@ -807,7 +807,17 @@ function UserDashboard({
 
       {/* Modals */}
       {showDeposit && <DepositModal user={user} settings={settings} onClose={() => setShowDeposit(false)} onSubmit={(t: any) => updateTransactions([...transactions, t])} />}
-      {showWithdraw && <WithdrawModal user={user} settings={settings} onClose={() => setShowWithdraw(false)} onSubmit={(t: any) => updateTransactions([...transactions, t])} />}
+      {showWithdraw && (
+        <WithdrawModal 
+          user={user} 
+          settings={settings} 
+          onClose={() => setShowWithdraw(false)} 
+          onSubmit={(t: any) => {
+            updateTransactions([...transactions, t]);
+            updateUsers((prev: User[]) => prev.map(u => u.id === user.id ? { ...u, balance: u.balance - t.amount } : u));
+          }} 
+        />
+      )}
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-secondary/90 backdrop-blur-xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
@@ -959,7 +969,7 @@ function QuickAction({ icon, label, color, onClick }: any) {
   );
 }
 
-function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settings, plans }: any) {
+function TasksTab({ user, updateUsers, tasks, transactions, updateTransactions, settings, plans }: any) {
   const [completingTask, setCompletingTask] = useState<Task | null>(null);
   const [timer, setTimer] = useState(0);
 
@@ -1007,16 +1017,16 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
       description: `Task completed: ${completingTask.title}`
     };
 
-    setTransactions([...transactions, transaction]);
+    updateTransactions([...transactions, transaction]);
     
-    setUsers((prev: User[]) => {
+    updateUsers((prev: User[]) => {
       let updatedUsers = [...prev];
       updatedUsers = updatedUsers.map(u => {
         if (u.id === user.id) {
           return {
             ...u,
             balance: u.balance + completingTask.amount,
-            totalEarnings: u.totalEarnings + completingTask.amount
+            totalEarnings: (u.totalEarnings || 0) + completingTask.amount
           };
         }
         return u;
@@ -1041,7 +1051,7 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
               return {
                 ...u,
                 balance: u.balance + bonusAmount,
-                totalEarnings: u.totalEarnings + bonusAmount
+                totalEarnings: (u.totalEarnings || 0) + bonusAmount
               };
             }
             return u;
@@ -1053,25 +1063,41 @@ function TasksTab({ user, setUsers, tasks, transactions, setTransactions, settin
       return updatedUsers;
     });
 
+    const earnedAmount = completingTask.amount;
     setCompletingTask(null);
-    alert(`কাজ সম্পন্ন হয়েছে! আপনি ৳${completingTask.amount} আয় করেছেন।`);
+    alert(`অভিনন্দন! কাজ সম্পন্ন হয়েছে। আপনি ৳${earnedAmount} উপার্জন করেছেন।`);
   };
 
   if (completingTask) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="relative w-40 h-40 mb-10">
-          <div className="absolute inset-0 rounded-full border-4 border-white/5" />
-          <div 
-            className="absolute inset-0 rounded-full border-4 border-highlight border-t-transparent animate-spin" 
-            style={{ animationDuration: '1.5s' }}
+        <div className="relative w-48 h-48 mb-10">
+          <div className="absolute inset-0 rounded-full border-8 border-white/5" />
+          <motion.div 
+            initial={{ rotate: 0 }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            className="absolute inset-0 rounded-full border-8 border-highlight border-t-transparent" 
           />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-4xl font-bold text-white">{timer}s</span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-5xl font-bold text-white mb-1">{timer}s</span>
+            <span className="text-[10px] font-bold text-highlight uppercase tracking-[0.2em]">Processing</span>
           </div>
         </div>
-        <h2 className="text-2xl font-bold text-white mb-3 font-bangla">{completingTask.title}</h2>
-        <p className="text-slate-400 font-medium">অনুগ্রহ করে অপেক্ষা করুন, আপনার কাজ যাচাই করা হচ্ছে...</p>
+        <h3 className="text-2xl font-bold text-white mb-4 font-bangla">কাজ সম্পন্ন হচ্ছে...</h3>
+        <p className="text-slate-400 max-w-[250px] mx-auto text-sm leading-relaxed font-bangla">
+          অনুগ্রহ করে অপেক্ষা করুন। আপনার অ্যাকাউন্টে ৳{completingTask.amount} যোগ করা হচ্ছে।
+        </p>
+        
+        {/* Progress Bar */}
+        <div className="w-64 h-2 bg-white/5 rounded-full mt-10 overflow-hidden border border-white/5">
+          <motion.div 
+            initial={{ width: "0%" }}
+            animate={{ width: "100%" }}
+            transition={{ duration: completingTask.timeRequired, ease: "linear" }}
+            className="h-full bg-highlight"
+          />
+        </div>
       </div>
     );
   }
@@ -1957,23 +1983,28 @@ function AdminPanel({
 
       {/* Admin Sidebar */}
       <aside className={`
-        fixed inset-0 z-40 md:relative md:inset-auto
+        fixed inset-0 z-[60] md:relative md:inset-auto
         w-full md:w-72 bg-secondary border-r border-white/5 
-        flex flex-col transition-transform duration-300 ease-in-out
+        flex flex-col transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1)
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-        md:h-screen shadow-2xl
+        md:h-screen shadow-[20px_0_60px_rgba(0,0,0,0.5)]
       `}>
-        <div className="p-8 hidden md:flex items-center gap-4 border-b border-white/5">
-          <div className="w-12 h-12 bg-highlight rounded-2xl flex items-center justify-center text-white shadow-lg shadow-highlight/20">
-            <ShieldCheck size={28} />
+        <div className="p-8 flex items-center justify-between border-b border-white/5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-highlight rounded-2xl flex items-center justify-center text-white shadow-lg shadow-highlight/20">
+              <ShieldCheck size={28} />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white tracking-tight">Admin Panel</h1>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Control Center</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">Admin Panel</h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Super Admin Control</p>
-          </div>
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 text-slate-400 hover:text-white">
+            <X size={24} />
+          </button>
         </div>
 
-        <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar pt-20 md:pt-6">
+        <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar pt-6">
           <AdminNavItem active={adminTab === 'dashboard'} onClick={() => { setAdminTab('dashboard'); setIsSidebarOpen(false); }} icon={<LayoutDashboard size={22} />} label="Dashboard" />
           <AdminNavItem active={adminTab === 'users'} onClick={() => { setAdminTab('users'); setIsSidebarOpen(false); }} icon={<Users size={22} />} label="Users" />
           <AdminNavItem active={adminTab === 'tasks'} onClick={() => { setAdminTab('tasks'); setIsSidebarOpen(false); }} icon={<ClipboardList size={22} />} label="Tasks" />
@@ -2552,65 +2583,70 @@ function AdminSupport({ tickets, setTickets }: any) {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {tickets.map((ticket: any) => (
-        <div key={ticket.id} className="glass-card p-8 border-t-2 border-t-highlight/30">
-          <div className="flex justify-between items-start mb-6">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-highlight bg-highlight/10 px-3 py-1 rounded-lg">{ticket.category}</span>
-                <span className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-lg ${ticket.status === 'open' ? 'bg-amber-400/10 text-amber-400' : 'bg-emerald-400/10 text-emerald-400'}`}>{ticket.status}</span>
-              </div>
-              <h4 className="font-bold text-white text-xl tracking-tight">{ticket.subject}</h4>
-              <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">User ID: {ticket.userId}</p>
-            </div>
-            <button 
-              onClick={() => setActiveTicketId(activeTicketId === ticket.id ? null : ticket.id)}
-              className="text-highlight text-sm font-bold hover:underline transition-all"
-            >
-              {activeTicketId === ticket.id ? 'Cancel Reply' : 'Reply to Ticket'}
-            </button>
-          </div>
-          
-          <div className="bg-primary/50 p-6 rounded-2xl mb-8 border border-white/5 italic text-slate-400 text-sm leading-relaxed">
-            "{ticket.message}"
-          </div>
-
-          {ticket.replies.length > 0 && (
-            <div className="space-y-4 mb-8 border-l-2 border-white/5 pl-6">
-              {ticket.replies.map((reply: any) => (
-                <div key={reply.id} className="space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    {reply.senderId === 'bot' ? 'AI Assistant' : reply.isAdmin ? 'Administrator' : 'User'}
-                  </p>
-                  <p className="text-sm text-slate-300 leading-relaxed">{reply.message}</p>
+        <div key={ticket.id} className="glass-card overflow-hidden border-l-4 border-l-highlight">
+          <div className="p-6 md:p-8">
+            <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-highlight bg-highlight/10 px-2 py-0.5 rounded-md">{ticket.category}</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${ticket.status === 'open' ? 'bg-amber-400/10 text-amber-400' : 'bg-emerald-400/10 text-emerald-400'}`}>{ticket.status}</span>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {activeTicketId === ticket.id && (
-            <div className="flex gap-4">
-              <input 
-                type="text" 
-                placeholder="Type your official response..." 
-                className="flex-1 bg-primary/50 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-              />
+                <h4 className="font-bold text-white text-lg tracking-tight">{ticket.subject}</h4>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">User: {ticket.userId}</p>
+              </div>
               <button 
-                onClick={() => handleReply(ticket.id)}
-                className="btn-gradient px-8 py-4 text-sm"
+                onClick={() => setActiveTicketId(activeTicketId === ticket.id ? null : ticket.id)}
+                className="btn-gradient px-4 py-2 text-xs"
               >
-                Send Reply
+                {activeTicketId === ticket.id ? 'Cancel' : 'Reply'}
               </button>
             </div>
-          )}
+            
+            <div className="bg-primary/30 p-5 rounded-2xl mb-6 border border-white/5 text-slate-300 text-sm leading-relaxed">
+              {ticket.message}
+            </div>
+
+            {ticket.replies.length > 0 && (
+              <div className="space-y-4 pt-6 border-t border-white/5">
+                {ticket.replies.map((reply: any) => (
+                  <div key={reply.id} className={`flex ${reply.isAdmin ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm ${reply.isAdmin ? 'bg-highlight text-white rounded-tr-none' : 'bg-white/5 text-slate-300 rounded-tl-none border border-white/5'}`}>
+                      <p className="text-[9px] font-bold uppercase tracking-widest opacity-60 mb-1">
+                        {reply.senderId === 'bot' ? 'AI Assistant' : reply.isAdmin ? 'Admin' : 'User'}
+                      </p>
+                      <p className="leading-relaxed">{reply.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTicketId === ticket.id && (
+              <div className="mt-6 flex gap-3">
+                <input 
+                  type="text" 
+                  placeholder="Type your message..." 
+                  className="flex-1 bg-primary/50 border border-white/5 rounded-xl px-5 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-highlight/50 transition-all"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleReply(ticket.id)}
+                />
+                <button 
+                  onClick={() => handleReply(ticket.id)}
+                  className="w-12 h-12 bg-highlight text-white rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-lg shadow-highlight/20"
+                >
+                  <ArrowUpCircle size={24} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       ))}
       {tickets.length === 0 && (
         <div className="glass-card py-20 text-center text-slate-500 italic font-medium">
-          No support tickets currently require attention
+          No support tickets found
         </div>
       )}
     </div>
